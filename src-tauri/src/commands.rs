@@ -1,0 +1,108 @@
+//! Tauri commands — the bridge the React frontend calls via `invoke(...)`.
+//!
+//! Read commands just clone state out. Mutation commands change the config, persist it, return the
+//! updated config immediately, and kick off a fresh probe cycle in the background (so the UI also
+//! gets a `status-update` event without the command having to wait for every probe to finish).
+
+use crate::models::{Config, ListKind, Service, ServiceList, Snapshot, WanInfo};
+use crate::state::AppState;
+use tauri::{AppHandle, Manager, State};
+
+#[tauri::command]
+pub fn get_snapshot(state: State<AppState>) -> Option<Snapshot> {
+    state.snapshot.lock().unwrap().clone()
+}
+
+#[tauri::command]
+pub fn get_config(state: State<AppState>) -> Config {
+    state.config.lock().unwrap().clone()
+}
+
+#[tauri::command]
+pub fn get_wan_info(state: State<AppState>) -> Option<WanInfo> {
+    state.wan.lock().unwrap().clone()
+}
+
+/// Probe everything right now (also refreshes WAN) and return the resulting snapshot.
+#[tauri::command]
+pub async fn refresh_now(app: AppHandle) -> Snapshot {
+    crate::run_cycle(&app, true).await
+}
+
+#[tauri::command]
+pub fn add_service(
+    app: AppHandle,
+    list_id: String,
+    label: String,
+    host: String,
+    port: Option<u16>,
+) -> Config {
+    mutate(&app, |cfg| {
+        if let Some(list) = cfg.lists.iter_mut().find(|l| l.id == list_id) {
+            let mut svc = Service::new(&label, &host);
+            if let Some(p) = port {
+                svc.port = p;
+            }
+            list.services.push(svc);
+        }
+    })
+}
+
+#[tauri::command]
+pub fn remove_service(app: AppHandle, list_id: String, service_id: String) -> Config {
+    mutate(&app, |cfg| {
+        if let Some(list) = cfg.lists.iter_mut().find(|l| l.id == list_id) {
+            list.services.retain(|s| s.id != service_id);
+        }
+    })
+}
+
+#[tauri::command]
+pub fn add_list(app: AppHandle, name: String, kind: ListKind) -> Config {
+    mutate(&app, |cfg| {
+        cfg.lists.push(ServiceList::new(&name, kind, Vec::new()));
+    })
+}
+
+#[tauri::command]
+pub fn remove_list(app: AppHandle, list_id: String) -> Config {
+    mutate(&app, |cfg| {
+        cfg.lists.retain(|l| l.id != list_id);
+    })
+}
+
+#[tauri::command]
+pub fn update_settings(
+    app: AppHandle,
+    probe_interval_secs: Option<u64>,
+    timeout_ms: Option<u64>,
+) -> Config {
+    mutate(&app, |cfg| {
+        if let Some(v) = probe_interval_secs {
+            cfg.probe_interval_secs = v.max(5); // floor to avoid hammering the network
+        }
+        if let Some(v) = timeout_ms {
+            cfg.timeout_ms = v;
+        }
+    })
+}
+
+/// Apply `f` to the config under lock, persist the result, trigger a background re-probe, and
+/// return the updated config. Centralises the save + re-probe that every mutation needs.
+fn mutate<F: FnOnce(&mut Config)>(app: &AppHandle, f: F) -> Config {
+    let state = app.state::<AppState>();
+    let updated = {
+        let mut cfg = state.config.lock().unwrap();
+        f(&mut cfg);
+        cfg.clone()
+    };
+    if let Err(err) = crate::store::save(&state.config_path, &updated) {
+        eprintln!("qanary: failed to save config: {err}");
+    }
+    // Re-probe in the background so the change shows up without blocking this command.
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        crate::run_cycle(&handle, false).await;
+    });
+    updated
+}
