@@ -323,3 +323,66 @@ body {
 .add-list input {
   flex: 1 1 auto;
 }
+
+/* ---------- Update UI ---------- */
+
+.update-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--panel-2);
+  border-bottom: 1px solid var(--accent);
+  font-size: 13px;
+  color: var(--text);
+}
+
+.update-btn {
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.update-btn:hover {
+  filter: brightness(1.1);
+}
+
+.update-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 8px 12px;
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.update-msg {
+  font-size: 12px;
+  color: var(--muted);
+}
+.update-err {
+  color: var(--red);
+}
+
+.update-check-btn {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 5px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.update-check-btn:hover:not(:disabled) {
+  color: var(--text);
+  border-color: var(--accent);
+}
+.update-check-btn:disabled {
+  opacity: 0.5;
+  cursor: default;
+}

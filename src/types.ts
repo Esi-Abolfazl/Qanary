@@ -34,7 +34,6 @@ export interface Snapshot {
   lists: ListStatus[];
   overall: Severity;
   wan: WanInfo | null;
-  updated_at: number;
 }
 
 // ----- Persisted config (returned by mutation commands) -----

@@ -3,11 +3,9 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { Config, ListKind, Snapshot, WanInfo } from "./types";
+import type { Config, ListKind, Snapshot } from "./types";
 
 export const getSnapshot = () => invoke<Snapshot | null>("get_snapshot");
-export const getConfig = () => invoke<Config>("get_config");
-export const getWanInfo = () => invoke<WanInfo | null>("get_wan_info");
 
 /** Probe everything immediately and return the fresh snapshot. */
 export const refreshNow = () => invoke<Snapshot>("refresh_now");

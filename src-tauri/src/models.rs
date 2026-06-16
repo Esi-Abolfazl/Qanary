@@ -196,6 +196,4 @@ pub struct Snapshot {
     pub lists: Vec<ListStatus>,
     pub overall: Severity,
     pub wan: Option<WanInfo>,
-    /// Unix epoch seconds when this snapshot was produced.
-    pub updated_at: u64,
 }

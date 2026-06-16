@@ -14,7 +14,7 @@ mod wan;
 use models::Snapshot;
 use state::AppState;
 use std::sync::Mutex;
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 use tauri::{Emitter, Manager};
 
 /// Event name the frontend subscribes to for live snapshot pushes.
@@ -49,7 +49,6 @@ pub async fn run_cycle(app: &tauri::AppHandle, refresh_wan: bool) -> Snapshot {
         lists,
         overall,
         wan,
-        updated_at: now_secs(),
     };
 
     *state.snapshot.lock().unwrap() = Some(snapshot.clone());
@@ -57,17 +56,12 @@ pub async fn run_cycle(app: &tauri::AppHandle, refresh_wan: bool) -> Snapshot {
     snapshot
 }
 
-fn now_secs() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map(|d| d.as_secs())
-        .unwrap_or(0)
-}
-
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
+        .plugin(tauri_plugin_process::init())
         .setup(|app| {
             // Config path inside the per-app config dir (created on first save).
             let config_path = app
@@ -122,8 +116,6 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_snapshot,
-            commands::get_config,
-            commands::get_wan_info,
             commands::refresh_now,
             commands::add_service,
             commands::remove_service,

@@ -4,23 +4,13 @@
 //! updated config immediately, and kick off a fresh probe cycle in the background (so the UI also
 //! gets a `status-update` event without the command having to wait for every probe to finish).
 
-use crate::models::{Config, ListKind, Service, ServiceList, Snapshot, WanInfo};
+use crate::models::{Config, ListKind, Service, ServiceList, Snapshot};
 use crate::state::AppState;
 use tauri::{AppHandle, Manager, State};
 
 #[tauri::command]
 pub fn get_snapshot(state: State<AppState>) -> Option<Snapshot> {
     state.snapshot.lock().unwrap().clone()
-}
-
-#[tauri::command]
-pub fn get_config(state: State<AppState>) -> Config {
-    state.config.lock().unwrap().clone()
-}
-
-#[tauri::command]
-pub fn get_wan_info(state: State<AppState>) -> Option<WanInfo> {
-    state.wan.lock().unwrap().clone()
 }
 
 /// Probe everything right now (also refreshes WAN) and return the resulting snapshot.
