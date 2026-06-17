@@ -1,23 +1,98 @@
+import { useEffect, useRef, useState } from "react";
 import type { Severity, Snapshot } from "../types";
 
 const SEVERITY_TEXT: Record<Severity, string> = {
   green: "All systems reachable",
-  yellow: "Internet unreachable",
-  red: "Intranet down — critical",
+  red: "Services unreachable",
 };
 
 export function Header({
   snapshot,
   onRefresh,
+  onAddList,
+  onOpenSettings,
+  onResetConfig,
 }: {
   snapshot: Snapshot | null;
   onRefresh: () => void;
+  onAddList: () => void;
+  onOpenSettings: () => void;
+  onResetConfig: () => void;
 }) {
   const overall: Severity = snapshot?.overall ?? "green";
   const wan = snapshot?.wan ?? null;
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmReset, setConfirmReset] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    function handleClick(e: MouseEvent) {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+        setConfirmReset(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [menuOpen]);
+
+  function pick(action: () => void) {
+    setMenuOpen(false);
+    setConfirmReset(false);
+    action();
+  }
 
   return (
     <header className="header">
+      <div className="header-menu-wrap" ref={menuRef}>
+        <button
+          className="header-menu-btn"
+          onClick={() => setMenuOpen((o) => !o)}
+          title="Menu"
+          aria-haspopup="true"
+          aria-expanded={menuOpen}
+        >
+          ☰
+        </button>
+        {menuOpen && (
+          <div className="header-dropdown">
+            {confirmReset ? (
+              <>
+                <div className="header-dropdown-confirm-label">Reset to defaults?</div>
+                <button
+                  className="header-dropdown-item header-dropdown-danger"
+                  onClick={() => pick(onResetConfig)}
+                >
+                  Yes, reset
+                </button>
+                <button
+                  className="header-dropdown-item"
+                  onClick={() => setConfirmReset(false)}
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <>
+                <button className="header-dropdown-item" onClick={() => pick(onAddList)}>
+                  Add list
+                </button>
+                <button className="header-dropdown-item" onClick={() => pick(onOpenSettings)}>
+                  Settings
+                </button>
+                <div className="header-dropdown-divider" />
+                <button
+                  className="header-dropdown-item header-dropdown-danger"
+                  onClick={() => setConfirmReset(true)}
+                >
+                  Reset to defaults
+                </button>
+              </>
+            )}
+          </div>
+        )}
+      </div>
       <div className={`light light-${overall}`} aria-label={`status: ${overall}`} />
       <div className="header-main">
         <div className="header-title">Qanary</div>
@@ -36,9 +111,7 @@ export function Header({
           <span className="wan-ip">—</span>
         )}
       </div>
-      <button className="refresh" onClick={onRefresh} title="Refresh now">
-        ↻
-      </button>
+      <button className="refresh" onClick={onRefresh} title="Refresh now">↻</button>
     </header>
   );
 }

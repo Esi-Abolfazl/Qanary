@@ -14,17 +14,6 @@ use uuid::Uuid;
 // Persisted config
 // ---------------------------------------------------------------------------
 
-/// Whether a list represents the wider internet or the local/national intranet.
-/// This drives how severe an outage is (see `Severity`).
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-#[serde(rename_all = "lowercase")]
-pub enum ListKind {
-    /// Foreign services. All-down → yellow warning.
-    Internet,
-    /// Local/national services. All-down → red critical.
-    Intranet,
-}
-
 /// A single endpoint we probe (one host:port).
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Service {
@@ -57,21 +46,23 @@ impl Service {
     }
 }
 
-/// A named group of services with a `kind` that sets outage severity.
+/// A named group of services.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ServiceList {
     pub id: String,
     pub name: String,
-    pub kind: ListKind,
+    /// Emoji icon shown before the list name in the UI.
+    #[serde(default)]
+    pub icon: String,
     pub services: Vec<Service>,
 }
 
 impl ServiceList {
-    pub fn new(name: &str, kind: ListKind, services: Vec<Service>) -> Self {
+    pub fn new(name: &str, icon: &str, services: Vec<Service>) -> Self {
         ServiceList {
             id: Uuid::new_v4().to_string(),
             name: name.to_string(),
-            kind,
+            icon: icon.to_string(),
             services,
         }
     }
@@ -106,11 +97,11 @@ fn default_ip_providers() -> Vec<String> {
 }
 
 impl Default for Config {
-    /// First-run seed: the two lists from the product spec.
+    /// First-run seed.
     fn default() -> Self {
-        let internet = ServiceList::new(
-            "Internet",
-            ListKind::Internet,
+        let global = ServiceList::new(
+            "Global",
+            "🌍",
             vec![
                 Service::new("Claude", "claude.ai"),
                 Service::new("Telegram", "telegram.org"),
@@ -119,9 +110,9 @@ impl Default for Config {
                 Service::new("X", "x.com"),
             ],
         );
-        let intranet = ServiceList::new(
-            "Intranet",
-            ListKind::Intranet,
+        let iran = ServiceList::new(
+            "Iran",
+            "🇮🇷",
             vec![
                 Service::new("Digikala", "digikala.com"),
                 Service::new("Torob", "torob.ir"),
@@ -130,7 +121,7 @@ impl Default for Config {
             ],
         );
         Config {
-            lists: vec![internet, intranet],
+            lists: vec![global, iran],
             probe_interval_secs: default_interval(),
             timeout_ms: default_timeout(),
             ip_providers: default_ip_providers(),
@@ -169,7 +160,6 @@ impl ServiceState {
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
     Green,
-    Yellow,
     Red,
 }
 
@@ -188,7 +178,7 @@ pub struct ServiceStatus {
 pub struct ListStatus {
     pub id: String,
     pub name: String,
-    pub kind: ListKind,
+    pub icon: String,
     pub services: Vec<ServiceStatus>,
     pub all_down: bool,
 }

@@ -2,8 +2,7 @@
 // serde serialises the enums in lowercase, so these are lowercase string unions.
 
 export type ServiceState = "up" | "blocked" | "down" | "checking";
-export type ListKind = "internet" | "intranet";
-export type Severity = "green" | "yellow" | "red";
+export type Severity = "green" | "red";
 
 // ----- Runtime snapshot (read-only, pushed from the backend) -----
 
@@ -18,7 +17,7 @@ export interface ServiceStatus {
 export interface ListStatus {
   id: string;
   name: string;
-  kind: ListKind;
+  icon: string;
   services: ServiceStatus[];
   all_down: boolean;
 }
@@ -49,7 +48,7 @@ export interface Service {
 export interface ServiceList {
   id: string;
   name: string;
-  kind: ListKind;
+  icon: string;
   services: Service[];
 }
 

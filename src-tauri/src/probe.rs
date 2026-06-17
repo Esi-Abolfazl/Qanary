@@ -15,7 +15,7 @@
 //! heuristics we deliberately skip for v1.
 
 use crate::models::{
-    Config, ListKind, ListStatus, ServiceList, ServiceState, ServiceStatus, Severity,
+    Config, ListStatus, ServiceList, ServiceState, ServiceStatus, Severity,
 };
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -76,20 +76,10 @@ fn compute_all_down(statuses: &[ServiceStatus]) -> bool {
     !statuses.is_empty() && statuses.iter().all(|s| s.state.is_failure())
 }
 
-/// Worst-of severity across all lists:
-/// any Intranet list fully down → Red; else any Internet list fully down → Yellow; else Green.
+/// Any list fully down → Red; else Green.
 pub fn overall_severity(lists: &[ListStatus]) -> Severity {
-    let intranet_down = lists
-        .iter()
-        .any(|l| l.kind == ListKind::Intranet && l.all_down);
-    if intranet_down {
-        return Severity::Red;
-    }
-    let internet_down = lists
-        .iter()
-        .any(|l| l.kind == ListKind::Internet && l.all_down);
-    if internet_down {
-        Severity::Yellow
+    if lists.iter().any(|l| l.all_down) {
+        Severity::Red
     } else {
         Severity::Green
     }
@@ -108,7 +98,7 @@ pub async fn probe_all(config: &Config, client: &reqwest::Client) -> Vec<ListSta
         result.push(ListStatus {
             id: list.id.clone(),
             name: list.name.clone(),
-            kind: list.kind,
+            icon: list.icon.clone(),
             services: statuses,
             all_down,
         });
@@ -176,12 +166,12 @@ mod tests {
         }
     }
 
-    fn list(kind: ListKind, states: &[ServiceState]) -> ListStatus {
+    fn list(states: &[ServiceState]) -> ListStatus {
         let services: Vec<_> = states.iter().copied().map(status).collect();
         ListStatus {
             id: "l".into(),
             name: "l".into(),
-            kind,
+            icon: "".into(),
             all_down: compute_all_down(&services),
             services,
         }
@@ -205,27 +195,10 @@ mod tests {
     }
 
     #[test]
-    fn severity_prefers_red_then_yellow() {
+    fn severity_any_list_down_is_red() {
         use ServiceState::*;
-        // Intranet fully down → Red, regardless of internet.
-        let lists = vec![
-            list(ListKind::Internet, &[Down, Down]),
-            list(ListKind::Intranet, &[Down]),
-        ];
-        assert_eq!(overall_severity(&lists), Severity::Red);
-
-        // Only internet down → Yellow.
-        let lists = vec![
-            list(ListKind::Internet, &[Down, Blocked]),
-            list(ListKind::Intranet, &[Up]),
-        ];
-        assert_eq!(overall_severity(&lists), Severity::Yellow);
-
-        // Everything reachable → Green.
-        let lists = vec![
-            list(ListKind::Internet, &[Up]),
-            list(ListKind::Intranet, &[Up]),
-        ];
-        assert_eq!(overall_severity(&lists), Severity::Green);
+        assert_eq!(overall_severity(&[list(&[Down, Down]), list(&[Up])]), Severity::Red);
+        assert_eq!(overall_severity(&[list(&[Up]), list(&[Up])]), Severity::Green);
+        assert_eq!(overall_severity(&[list(&[Up])]), Severity::Green);
     }
 }

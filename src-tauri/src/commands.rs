@@ -4,7 +4,7 @@
 //! updated config immediately, and kick off a fresh probe cycle in the background (so the UI also
 //! gets a `status-update` event without the command having to wait for every probe to finish).
 
-use crate::models::{Config, ListKind, Service, ServiceList, Snapshot};
+use crate::models::{Config, Service, ServiceList, Snapshot};
 use crate::state::AppState;
 use tauri::{AppHandle, Manager, State};
 
@@ -53,10 +53,37 @@ pub fn remove_service(app: AppHandle, list_id: String, service_id: String) -> Co
 }
 
 #[tauri::command]
-pub fn add_list(app: AppHandle, name: String, kind: ListKind) -> Config {
+pub fn add_list(app: AppHandle, name: String, icon: String) -> Config {
     mutate(&app, |cfg| {
-        cfg.lists.push(ServiceList::new(&name, kind, Vec::new()));
+        cfg.lists.push(ServiceList::new(&name, &icon, Vec::new()));
     })
+}
+
+/// Update an existing list's display name and icon.
+#[tauri::command]
+pub fn update_list(app: AppHandle, list_id: String, name: String, icon: String) -> Config {
+    mutate(&app, |cfg| {
+        if let Some(list) = cfg.lists.iter_mut().find(|l| l.id == list_id) {
+            list.name = name.clone();
+            list.icon = icon.clone();
+        }
+    })
+}
+
+/// Wipe the persisted config, seed fresh defaults, re-probe.
+#[tauri::command]
+pub fn reset_config(app: AppHandle) -> Config {
+    let state = app.state::<AppState>();
+    let defaults = Config::default();
+    *state.config.lock().unwrap() = defaults.clone();
+    if let Err(err) = crate::store::save(&state.config_path, &defaults) {
+        eprintln!("qanary: failed to save reset config: {err}");
+    }
+    let handle = app.clone();
+    tauri::async_runtime::spawn(async move {
+        crate::run_cycle(&handle, true).await;
+    });
+    defaults
 }
 
 #[tauri::command]

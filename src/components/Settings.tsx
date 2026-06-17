@@ -12,18 +12,20 @@ function toSlots(arr: string[]): [string, string, string] {
 
 export function Settings({
   config,
+  open,
+  onClose,
   onSave,
 }: {
   config: Config | null;
+  open: boolean;
+  onClose: () => void;
   onSave: (providers: string[]) => void;
 }) {
-  const [open, setOpen] = useState(false);
   const [slots, setSlots] = useState<[string, string, string]>(["", "", ""]);
   const [seeded, setSeeded] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateState, setUpdateState] = useState<UpdateState>("idle");
 
-  // Seed inputs once the config arrives from the backend.
   useEffect(() => {
     if (config && !seeded) {
       setSlots(toSlots(config.ip_providers));
@@ -41,9 +43,9 @@ export function Settings({
 
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
-    // parseHost cleans each value; drop empties.
     const providers = slots.map(parseHost).filter(Boolean);
     onSave(providers);
+    onClose();
   }
 
   async function handleCheckUpdate() {
@@ -60,60 +62,59 @@ export function Settings({
   async function handleInstall() {
     setUpdateState("installing");
     try {
-      await downloadAndInstall(); // relaunches — never returns
+      await downloadAndInstall();
     } catch {
       setUpdateState("error");
     }
   }
 
+  if (!open) return null;
+
   return (
-    <section className="settings">
-      <button className="settings-toggle" onClick={() => setOpen((o) => !o)}>
-        {open ? "▲" : "▼"} Settings
-      </button>
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal modal-settings" onClick={(e) => e.stopPropagation()}>
+        <h3 className="modal-title">Settings</h3>
 
-      {open && (
-        <div className="settings-body">
-          <form className="providers-form" onSubmit={handleSave}>
-            <p className="settings-label">IP providers (tried in order):</p>
-            {slots.map((p, i) => (
-              <input
-                key={i}
-                className="provider-input"
-                placeholder={
-                  i === 0 ? "ifconfig.me/ip" : i === 1 ? "ipify.ir" : "api.ipify.org"
-                }
-                value={p}
-                onChange={(e) => setSlot(i, e.target.value)}
-              />
-            ))}
-            <button type="submit">Save</button>
-          </form>
-
-          <div className="update-section">
-            {updateState === "available" && updateInfo && (
-              <div className="update-banner">
-                <span>Update available: v{updateInfo.version}</span>
-                <button className="update-btn" onClick={handleInstall}>
-                  Install &amp; restart
-                </button>
-              </div>
-            )}
-            {updateState === "installing" && <span className="update-msg">Installing…</span>}
-            {updateState === "up-to-date" && <span className="update-msg">Already up to date.</span>}
-            {updateState === "error" && (
-              <span className="update-msg update-err">Update check failed.</span>
-            )}
-            <button
-              className="update-check-btn"
-              onClick={handleCheckUpdate}
-              disabled={updateState === "checking" || updateState === "installing"}
-            >
-              {updateState === "checking" ? "Checking…" : "Check for updates"}
-            </button>
+        <form className="providers-form" onSubmit={handleSave}>
+          <p className="settings-label">IP providers (tried in order):</p>
+          {slots.map((p, i) => (
+            <input
+              key={i}
+              className="provider-input"
+              placeholder={i === 0 ? "ifconfig.me/ip" : i === 1 ? "ipify.ir" : "api.ipify.org"}
+              value={p}
+              onChange={(e) => setSlot(i, e.target.value)}
+            />
+          ))}
+          <div className="modal-actions">
+            <button type="button" className="modal-cancel" onClick={onClose}>Cancel</button>
+            <button type="submit" className="modal-save">Save</button>
           </div>
+        </form>
+
+        <div className="update-section">
+          {updateState === "available" && updateInfo && (
+            <div className="update-banner">
+              <span>Update available: v{updateInfo.version}</span>
+              <button className="update-btn" onClick={handleInstall}>
+                Install &amp; restart
+              </button>
+            </div>
+          )}
+          {updateState === "installing" && <span className="update-msg">Installing…</span>}
+          {updateState === "up-to-date" && <span className="update-msg">Already up to date.</span>}
+          {updateState === "error" && (
+            <span className="update-msg update-err">Update check failed.</span>
+          )}
+          <button
+            className="update-check-btn"
+            onClick={handleCheckUpdate}
+            disabled={updateState === "checking" || updateState === "installing"}
+          >
+            {updateState === "checking" ? "Checking…" : "Check for updates"}
+          </button>
         </div>
-      )}
-    </section>
+      </div>
+    </div>
   );
 }

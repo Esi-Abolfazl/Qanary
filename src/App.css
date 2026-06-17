@@ -58,10 +58,6 @@ body {
   background: var(--green);
   color: var(--green);
 }
-.light-yellow {
-  background: var(--yellow);
-  color: var(--yellow);
-}
 .light-red {
   background: var(--red);
   color: var(--red);
@@ -155,31 +151,56 @@ body {
   font-size: 14px;
   flex: 1 1 auto;
 }
-.tag {
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  padding: 2px 7px;
-  border-radius: 999px;
-  border: 1px solid var(--border);
-  color: var(--muted);
+
+.list-icon {
+  margin-right: 5px;
 }
-.tag-internet {
-  color: #9cc2ff;
-  border-color: #2f4a78;
+
+/* Per-list ⋯ menu */
+.list-menu-wrap {
+  position: relative;
 }
-.tag-intranet {
-  color: #ffd28c;
-  border-color: #6b5326;
-}
-.list-remove {
+.list-menu-btn {
   background: none;
   border: none;
   color: var(--muted);
   cursor: pointer;
-  font-size: 14px;
+  font-size: 18px;
+  line-height: 1;
+  padding: 2px 4px;
+  border-radius: 4px;
 }
-.list-remove:hover {
+.list-menu-btn:hover {
+  color: var(--text);
+  background: var(--panel-2);
+}
+.list-dropdown {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 4px);
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 110px;
+  z-index: 100;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+}
+.list-dropdown-item {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--text);
+  text-align: left;
+  padding: 8px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.list-dropdown-item:hover {
+  background: var(--panel-2);
+}
+.list-dropdown-delete {
   color: var(--red);
 }
 
@@ -187,10 +208,6 @@ body {
   padding: 8px 12px;
   font-size: 12px;
   font-weight: 600;
-}
-.banner-warn {
-  background: rgba(241, 196, 15, 0.14);
-  color: var(--yellow);
 }
 .banner-critical {
   background: rgba(231, 76, 60, 0.16);
@@ -280,12 +297,8 @@ body {
   border-top: 1px solid var(--border);
   background: var(--panel);
   padding: 10px 12px;
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
 }
-.add-service,
-.add-list {
+.add-service {
   display: flex;
   gap: 6px;
 }
@@ -320,34 +333,158 @@ body {
 .add-area button:hover {
   filter: brightness(1.1);
 }
-.add-list input {
-  flex: 1 1 auto;
+/* ---------- Header menu ---------- */
+
+.header-menu-wrap {
+  position: relative;
 }
-
-/* ---------- Settings ---------- */
-
-.settings {
-  border-top: 1px solid var(--border);
+.header-menu-btn {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  width: 32px;
+  height: 32px;
+  font-size: 16px;
+  cursor: pointer;
+}
+.header-menu-btn:hover {
+  border-color: var(--accent);
+}
+.header-dropdown {
+  position: absolute;
+  left: 0;
+  top: calc(100% + 6px);
   background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  min-width: 150px;
+  z-index: 200;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.4);
 }
-
-.settings-toggle {
+.header-dropdown-item {
+  display: block;
   width: 100%;
   background: none;
   border: none;
-  color: var(--muted);
+  color: var(--text);
   text-align: left;
-  padding: 9px 12px;
+  padding: 9px 14px;
   font-size: 13px;
   cursor: pointer;
 }
-.settings-toggle:hover {
-  color: var(--text);
+.header-dropdown-item:hover {
+  background: var(--panel-2);
+}
+.header-dropdown-confirm-label {
+  padding: 8px 14px 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.header-dropdown-divider {
+  height: 1px;
+  background: var(--border);
+  margin: 4px 0;
+}
+.header-dropdown-danger {
+  color: var(--red);
 }
 
+/* ---------- Modal ---------- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+}
+.modal {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 20px;
+  min-width: 280px;
+  max-width: 360px;
+  width: 100%;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.5);
+}
+.modal-settings {
+  max-width: 420px;
+}
+.modal-title {
+  margin: 0 0 16px;
+  font-size: 15px;
+  font-weight: 700;
+}
+.modal-form {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.modal-row {
+  display: flex;
+  gap: 8px;
+}
+.modal-icon-input {
+  width: 52px;
+  flex: 0 0 auto;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: 18px;
+  text-align: center;
+}
+.modal-name-input {
+  flex: 1 1 auto;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: 13px;
+}
+.modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+.modal-cancel {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.modal-cancel:hover {
+  color: var(--text);
+  border-color: var(--text);
+}
+.modal-save {
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  border-radius: 8px;
+  padding: 7px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.modal-save:hover {
+  filter: brightness(1.1);
+}
+
+/* ---------- Settings (inside modal) ---------- */
+
 .settings-body {
-  padding: 10px 12px;
-  border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   gap: 12px;

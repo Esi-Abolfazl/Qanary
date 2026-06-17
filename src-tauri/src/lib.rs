@@ -123,7 +123,9 @@ pub fn run() {
             commands::add_service,
             commands::remove_service,
             commands::add_list,
+            commands::update_list,
             commands::remove_list,
+            commands::reset_config,
             commands::update_settings,
         ])
         .run(tauri::generate_context!())

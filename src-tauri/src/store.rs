@@ -31,7 +31,6 @@ pub fn save(path: &Path, config: &Config) -> std::io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::models::ListKind;
 
     /// Saving then loading yields an equivalent config.
     #[test]
@@ -51,13 +50,13 @@ mod tests {
         fs::remove_dir_all(&dir).ok();
     }
 
-    /// Missing file → seeded defaults (two lists, internet + intranet).
+    /// Missing file → seeded defaults (two lists: Global + Iran).
     #[test]
     fn missing_file_seeds_defaults() {
         let path = std::env::temp_dir().join("qanary-does-not-exist-xyz/config.json");
         let cfg = load(&path);
         assert_eq!(cfg.lists.len(), 2);
-        assert_eq!(cfg.lists[0].kind, ListKind::Internet);
-        assert_eq!(cfg.lists[1].kind, ListKind::Intranet);
+        assert_eq!(cfg.lists[0].name, "Global");
+        assert_eq!(cfg.lists[1].name, "Iran");
     }
 }
