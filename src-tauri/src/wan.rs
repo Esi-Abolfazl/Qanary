@@ -1,10 +1,17 @@
 //! WAN IP + geolocation lookup for the header.
 //!
-//! Uses free, key-less endpoints: `ip-api.com/json` first, falling back to `ipinfo.io/json`.
-//! The flag is computed from the ISO country code (no image assets — Unicode regional indicators).
+//! Strategy: try each provider URL in order, GET as plain text, validate with
+//! `IpAddr::from_str`. First valid IP wins. Then geolocate that IP via ipwho.is
+//! for country/flag (egress-independent — the IP is explicit in the URL).
 
 use crate::models::WanInfo;
 use serde::Deserialize;
+use std::net::IpAddr;
+use std::time::Duration;
+
+/// Per-provider request timeout. Keeps total WAN resolution fast even when
+/// one provider hangs: 3 providers × 4 s = 12 s worst case instead of 15 s+.
+const PROVIDER_TIMEOUT: Duration = Duration::from_secs(4);
 
 /// Convert a 2-letter ISO country code into its flag emoji (e.g. "IR" → 🇮🇷).
 /// Returns an empty string for anything that isn't two ASCII letters.
@@ -20,68 +27,58 @@ pub fn flag_emoji(country_code: &str) -> String {
         .collect()
 }
 
-/// Shape of an `ip-api.com/json` success response (only the fields we use).
 #[derive(Deserialize)]
-struct IpApiResponse {
-    status: String,
-    query: String,
+struct IpWhoResponse {
+    #[serde(default)]
+    success: bool,
+    #[serde(default)]
     country: String,
-    #[serde(rename = "countryCode")]
+    #[serde(default)]
     country_code: String,
 }
 
-/// Shape of an `ipinfo.io/json` response. `country` is an ISO code; there's no country name.
-#[derive(Deserialize)]
-struct IpInfoResponse {
-    ip: String,
-    #[serde(default)]
-    country: String,
+/// Look up WAN IP by trying providers in order, then geolocate the resolved IP.
+/// Returns `None` only if every provider fails (e.g. fully offline).
+pub async fn fetch_wan(client: &reqwest::Client, providers: &[String]) -> Option<WanInfo> {
+    let ip = resolve_ip(client, providers).await?;
+    Some(geolocate(client, &ip).await.unwrap_or(WanInfo {
+        ip: ip.clone(),
+        country_code: String::new(),
+        country_name: String::new(),
+        flag_emoji: String::new(),
+    }))
 }
 
-/// Look up the current WAN IP + location, trying the primary then the fallback provider.
-/// Returns `None` only if both fail (e.g. fully offline).
-pub async fn fetch_wan(client: &reqwest::Client) -> Option<WanInfo> {
-    if let Some(info) = fetch_ip_api(client).await {
-        return Some(info);
+/// Try each provider in order. Providers are stored without scheme; prepend https://.
+async fn resolve_ip(client: &reqwest::Client, providers: &[String]) -> Option<String> {
+    for host_path in providers {
+        let url = format!("https://{host_path}");
+        if let Some(ip) = try_provider(client, &url).await {
+            return Some(ip);
+        }
     }
-    fetch_ipinfo(client).await
+    None
 }
 
-async fn fetch_ip_api(client: &reqwest::Client) -> Option<WanInfo> {
-    let resp: IpApiResponse = client
-        .get("http://ip-api.com/json/?fields=status,query,country,countryCode")
-        .send()
-        .await
-        .ok()?
-        .json()
-        .await
-        .ok()?;
-    if resp.status != "success" {
+async fn try_provider(client: &reqwest::Client, url: &str) -> Option<String> {
+    let text = client.get(url).timeout(PROVIDER_TIMEOUT).send().await.ok()?.text().await.ok()?;
+    let trimmed = text.trim();
+    // Validate: only accept if it parses as an IP address.
+    trimmed.parse::<IpAddr>().ok()?;
+    Some(trimmed.to_string())
+}
+
+async fn geolocate(client: &reqwest::Client, ip: &str) -> Option<WanInfo> {
+    let url = format!("https://ipwho.is/{ip}");
+    let resp: IpWhoResponse = client.get(&url).send().await.ok()?.json().await.ok()?;
+    if !resp.success {
         return None;
     }
     Some(WanInfo {
         flag_emoji: flag_emoji(&resp.country_code),
-        ip: resp.query,
+        ip: ip.to_string(),
         country_name: resp.country,
         country_code: resp.country_code,
-    })
-}
-
-async fn fetch_ipinfo(client: &reqwest::Client) -> Option<WanInfo> {
-    let resp: IpInfoResponse = client
-        .get("https://ipinfo.io/json")
-        .send()
-        .await
-        .ok()?
-        .json()
-        .await
-        .ok()?;
-    Some(WanInfo {
-        flag_emoji: flag_emoji(&resp.country),
-        ip: resp.ip,
-        // ipinfo only gives the code; reuse it as the display name.
-        country_name: resp.country.clone(),
-        country_code: resp.country,
     })
 }
 
@@ -100,5 +97,14 @@ mod tests {
         assert_eq!(flag_emoji(""), "");
         assert_eq!(flag_emoji("USA"), "");
         assert_eq!(flag_emoji("1!"), "");
+    }
+
+    #[test]
+    fn ip_parse_guard_accepts_valid_rejects_garbage() {
+        assert!("1.2.3.4".parse::<IpAddr>().is_ok());
+        assert!("2001:db8::1".parse::<IpAddr>().is_ok());
+        assert!("<html>".parse::<IpAddr>().is_err());
+        assert!("not-an-ip".parse::<IpAddr>().is_err());
+        assert!("{\"ip\":\"1.2.3.4\"}".parse::<IpAddr>().is_err());
     }
 }

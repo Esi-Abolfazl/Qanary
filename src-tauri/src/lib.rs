@@ -39,7 +39,7 @@ pub async fn run_cycle(app: &tauri::AppHandle, refresh_wan: bool) -> Snapshot {
     let overall = probe::overall_severity(&lists);
 
     if refresh_wan {
-        if let Some(info) = wan::fetch_wan(&client).await {
+        if let Some(info) = wan::fetch_wan(&client, &config.ip_providers).await {
             *state.wan.lock().unwrap() = Some(info);
         }
     }
@@ -105,7 +105,9 @@ pub fn run() {
                         .probe_interval_secs
                         .max(5);
 
-                    run_cycle(&handle, tick % WAN_REFRESH_EVERY == 0).await;
+                    // Refresh WAN on schedule, but also retry every cycle while still unknown.
+                    let wan_known = handle.state::<AppState>().wan.lock().unwrap().is_some();
+                    run_cycle(&handle, !wan_known || tick % WAN_REFRESH_EVERY == 0).await;
 
                     tokio::time::sleep(Duration::from_secs(interval)).await;
                     tick = tick.wrapping_add(1);
@@ -116,6 +118,7 @@ pub fn run() {
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_snapshot,
+            commands::get_config,
             commands::refresh_now,
             commands::add_service,
             commands::remove_service,

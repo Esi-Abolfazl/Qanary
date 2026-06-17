@@ -57,4 +57,5 @@ export interface Config {
   lists: ServiceList[];
   probe_interval_secs: number;
   timeout_ms: number;
+  ip_providers: string[];
 }

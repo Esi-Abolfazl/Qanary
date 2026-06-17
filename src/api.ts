@@ -6,6 +6,7 @@ import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import type { Config, ListKind, Snapshot } from "./types";
 
 export const getSnapshot = () => invoke<Snapshot | null>("get_snapshot");
+export const getConfig = () => invoke<Config>("get_config");
 
 /** Probe everything immediately and return the fresh snapshot. */
 export const refreshNow = () => invoke<Snapshot>("refresh_now");
@@ -21,10 +22,11 @@ export const addList = (name: string, kind: ListKind) =>
 
 export const removeList = (listId: string) => invoke<Config>("remove_list", { listId });
 
-export const updateSettings = (probeIntervalSecs?: number, timeoutMs?: number) =>
+export const updateSettings = (probeIntervalSecs?: number, timeoutMs?: number, ipProviders?: string[]) =>
   invoke<Config>("update_settings", {
     probeIntervalSecs: probeIntervalSecs ?? null,
     timeoutMs: timeoutMs ?? null,
+    ipProviders: ipProviders ?? null,
   });
 
 /** Subscribe to live snapshot pushes. Returns a promise of the unlisten fn. */

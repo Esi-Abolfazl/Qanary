@@ -324,6 +324,78 @@ body {
   flex: 1 1 auto;
 }
 
+/* ---------- Settings ---------- */
+
+.settings {
+  border-top: 1px solid var(--border);
+  background: var(--panel);
+}
+
+.settings-toggle {
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--muted);
+  text-align: left;
+  padding: 9px 12px;
+  font-size: 13px;
+  cursor: pointer;
+}
+.settings-toggle:hover {
+  color: var(--text);
+}
+
+.settings-body {
+  padding: 10px 12px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.settings-label {
+  margin: 0 0 6px;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.providers-form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.provider-input {
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: 8px;
+  padding: 7px 9px;
+  font-size: 13px;
+  width: 100%;
+}
+
+.providers-form button {
+  align-self: flex-start;
+  background: var(--accent);
+  border: none;
+  color: #fff;
+  border-radius: 8px;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.providers-form button:hover {
+  filter: brightness(1.1);
+}
+
+.update-section {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
 /* ---------- Update UI ---------- */
 
 .update-banner {

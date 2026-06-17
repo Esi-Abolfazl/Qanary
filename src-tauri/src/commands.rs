@@ -13,6 +13,11 @@ pub fn get_snapshot(state: State<AppState>) -> Option<Snapshot> {
     state.snapshot.lock().unwrap().clone()
 }
 
+#[tauri::command]
+pub fn get_config(state: State<AppState>) -> Config {
+    state.config.lock().unwrap().clone()
+}
+
 /// Probe everything right now (also refreshes WAN) and return the resulting snapshot.
 #[tauri::command]
 pub async fn refresh_now(app: AppHandle) -> Snapshot {
@@ -66,6 +71,7 @@ pub fn update_settings(
     app: AppHandle,
     probe_interval_secs: Option<u64>,
     timeout_ms: Option<u64>,
+    ip_providers: Option<Vec<String>>,
 ) -> Config {
     mutate(&app, |cfg| {
         if let Some(v) = probe_interval_secs {
@@ -73,6 +79,16 @@ pub fn update_settings(
         }
         if let Some(v) = timeout_ms {
             cfg.timeout_ms = v;
+        }
+        if let Some(v) = ip_providers {
+            let providers: Vec<String> = v
+                .into_iter()
+                .map(|s| s.trim().to_string())
+                .filter(|s| !s.is_empty())
+                .collect();
+            if !providers.is_empty() {
+                cfg.ip_providers = providers;
+            }
         }
     })
 }

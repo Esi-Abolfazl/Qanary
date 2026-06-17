@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ListKind } from "../types";
+import { parseHost } from "../utils/parseHost";
 
 /** Minimal {id,name} needed to populate the target-list dropdown. */
 interface ListRef {
@@ -33,10 +34,10 @@ export function AddServiceForm({
 
   const submitService = (e: React.FormEvent) => {
     e.preventDefault();
-    const trimmedHost = host.trim();
-    if (!listId || !trimmedHost) return;
+    const cleanHost = parseHost(host);
+    if (!listId || !cleanHost) return;
     const parsedPort = port.trim() ? Number(port) : undefined;
-    onAdd(listId, label.trim() || trimmedHost, trimmedHost, parsedPort);
+    onAdd(listId, label.trim() || cleanHost, cleanHost, parsedPort);
     setLabel("");
     setHost("");
     setPort("");

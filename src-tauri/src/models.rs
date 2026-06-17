@@ -85,6 +85,9 @@ pub struct Config {
     pub probe_interval_secs: u64,
     #[serde(default = "default_timeout")]
     pub timeout_ms: u64,
+    /// Ordered list of HTTPS plain-text IP providers tried in sequence.
+    #[serde(default = "default_ip_providers")]
+    pub ip_providers: Vec<String>,
 }
 
 fn default_interval() -> u64 {
@@ -92,6 +95,14 @@ fn default_interval() -> u64 {
 }
 fn default_timeout() -> u64 {
     3000
+}
+fn default_ip_providers() -> Vec<String> {
+    // Stored without scheme; fetch_wan prepends https:// at call time.
+    vec![
+        "ifconfig.me/ip".into(),
+        "ipify.ir".into(),
+        "api.ipify.org".into(),
+    ]
 }
 
 impl Default for Config {
@@ -122,6 +133,7 @@ impl Default for Config {
             lists: vec![internet, intranet],
             probe_interval_secs: default_interval(),
             timeout_ms: default_timeout(),
+            ip_providers: default_ip_providers(),
         }
     }
 }
