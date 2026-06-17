@@ -1,20 +1,24 @@
 import { useEffect, useRef, useState } from "react";
 import type { ListStatus } from "../types";
 import { ServiceRow } from "./ServiceRow";
+import * as api from "../api";
 
 export function ServiceList({
   list,
   onRemoveService,
   onRemoveList,
   onEditList,
+  onAddService,
 }: {
   list: ListStatus;
   onRemoveService: (listId: string, serviceId: string) => void;
   onRemoveList: (listId: string) => void;
   onEditList: (listId: string, name: string, icon: string) => void;
+  onAddService: (listId: string, listName: string) => void;
 }) {
   const banner = list.all_down;
   const [menuOpen, setMenuOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(list.collapsed);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -40,6 +44,12 @@ export function ServiceList({
     onEditList(list.id, list.name, list.icon);
   }
 
+  function handleToggleCollapse() {
+    const next = !collapsed;
+    setCollapsed(next);
+    api.setListCollapsed(list.id, next);
+  }
+
   return (
     <section className="list">
       <div className="list-head">
@@ -47,6 +57,13 @@ export function ServiceList({
           {list.icon && <span className="list-icon">{list.icon}</span>}
           {list.name}
         </h2>
+        <button
+          className="list-menu-btn"
+          onClick={() => onAddService(list.id, list.name)}
+          title="Add service"
+        >
+          +
+        </button>
         <div className="list-menu-wrap" ref={menuRef}>
           <button
             className="list-menu-btn"
@@ -64,18 +81,28 @@ export function ServiceList({
             </div>
           )}
         </div>
+        <button
+          className="list-menu-btn list-chevron-btn"
+          onClick={handleToggleCollapse}
+          title={collapsed ? "Expand" : "Collapse"}
+        >
+          {collapsed ? "v" : "^"}
+        </button>
       </div>
 
-      {banner && (
-        <div className="banner banner-critical">All services unreachable</div>
+      {!collapsed && (
+        <>
+          {banner && (
+            <div className="banner banner-critical">All services unreachable</div>
+          )}
+          <ul className="rows">
+            {list.services.map((s) => (
+              <ServiceRow key={s.id} status={s} onRemove={() => onRemoveService(list.id, s.id)} />
+            ))}
+            {list.services.length === 0 && <li className="empty">No services yet</li>}
+          </ul>
+        </>
       )}
-
-      <ul className="rows">
-        {list.services.map((s) => (
-          <ServiceRow key={s.id} status={s} onRemove={() => onRemoveService(list.id, s.id)} />
-        ))}
-        {list.services.length === 0 && <li className="empty">No services yet</li>}
-      </ul>
     </section>
   );
 }

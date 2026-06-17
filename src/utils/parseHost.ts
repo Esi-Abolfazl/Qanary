@@ -12,6 +12,19 @@
  *   "docs.google.com"                          → "docs.google.com"
  *   "google.com/inbox"                         → "google.com/inbox"
  */
+/** Parse a user-entered host string that may contain an inline port (e.g. `google.com:8080`).
+ *  Runs parseHost first to strip scheme/www/wildcards, then splits on the trailing `:port`.
+ *  Port is clamped to 1–65535; out-of-range → undefined (caller defaults to 443). */
+export function splitHostPort(raw: string): { host: string; port: number | undefined } {
+  const cleaned = parseHost(raw);
+  const m = cleaned.match(/^([^:]+):(\d+)$/);
+  if (m) {
+    const port = Number(m[2]);
+    return { host: m[1], port: port >= 1 && port <= 65535 ? port : undefined };
+  }
+  return { host: cleaned, port: undefined };
+}
+
 export function parseHost(raw: string): string {
   let s = raw.trim();
   // [text](url) → extract url from parens

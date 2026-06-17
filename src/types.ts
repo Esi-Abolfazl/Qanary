@@ -20,6 +20,7 @@ export interface ListStatus {
   icon: string;
   services: ServiceStatus[];
   all_down: boolean;
+  collapsed: boolean;
 }
 
 export interface WanInfo {
@@ -50,6 +51,7 @@ export interface ServiceList {
   name: string;
   icon: string;
   services: Service[];
+  collapsed: boolean;
 }
 
 export interface Config {

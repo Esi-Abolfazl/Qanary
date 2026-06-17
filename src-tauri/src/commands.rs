@@ -120,6 +120,24 @@ pub fn update_settings(
     })
 }
 
+/// Persist the collapsed/expanded state of a list without triggering a network re-probe.
+/// Collapse is a pure UI concern — firing a full probe on every chevron click would be wasteful.
+#[tauri::command]
+pub fn set_list_collapsed(app: AppHandle, list_id: String, collapsed: bool) -> Config {
+    let state = app.state::<AppState>();
+    let updated = {
+        let mut cfg = state.config.lock().unwrap();
+        if let Some(list) = cfg.lists.iter_mut().find(|l| l.id == list_id) {
+            list.collapsed = collapsed;
+        }
+        cfg.clone()
+    };
+    if let Err(err) = crate::store::save(&state.config_path, &updated) {
+        eprintln!("qanary: failed to save collapsed state: {err}");
+    }
+    updated
+}
+
 /// Apply `f` to the config under lock, persist the result, trigger a background re-probe, and
 /// return the updated config. Centralises the save + re-probe that every mutation needs.
 fn mutate<F: FnOnce(&mut Config)>(app: &AppHandle, f: F) -> Config {

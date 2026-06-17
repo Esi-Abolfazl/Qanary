@@ -291,48 +291,10 @@ body {
   font-style: italic;
 }
 
-/* ---------- Add area ---------- */
+.list-chevron-btn {
+  font-size: 13px;
+}
 
-.add-area {
-  border-top: 1px solid var(--border);
-  background: var(--panel);
-  padding: 10px 12px;
-}
-.add-service {
-  display: flex;
-  gap: 6px;
-}
-.add-area input,
-.add-area select {
-  background: var(--panel-2);
-  border: 1px solid var(--border);
-  color: var(--text);
-  border-radius: 8px;
-  padding: 7px 9px;
-  font-size: 13px;
-  min-width: 0;
-}
-.add-service input:nth-child(3) {
-  flex: 1 1 auto;
-}
-.add-area .port {
-  width: 60px;
-  flex: 0 0 auto;
-}
-.add-area button {
-  background: var(--accent);
-  border: none;
-  color: #fff;
-  border-radius: 8px;
-  padding: 7px 12px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  white-space: nowrap;
-}
-.add-area button:hover {
-  filter: brightness(1.1);
-}
 /* ---------- Header menu ---------- */
 
 .header-menu-wrap {

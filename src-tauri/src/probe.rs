@@ -101,6 +101,7 @@ pub async fn probe_all(config: &Config, client: &reqwest::Client) -> Vec<ListSta
             icon: list.icon.clone(),
             services: statuses,
             all_down,
+            collapsed: list.collapsed,
         });
     }
     result
@@ -174,6 +175,7 @@ mod tests {
             icon: "".into(),
             all_down: compute_all_down(&services),
             services,
+            collapsed: false,
         }
     }
 

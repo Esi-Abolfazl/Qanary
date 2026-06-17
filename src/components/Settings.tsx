@@ -3,11 +3,17 @@ import type { Config } from "../types";
 import { parseHost } from "../utils/parseHost";
 import { checkForUpdate, downloadAndInstall, type UpdateInfo } from "../update";
 
-type UpdateState = "idle" | "checking" | "available" | "installing" | "up-to-date" | "error";
+type UpdateState =
+  | "idle"
+  | "checking"
+  | "available"
+  | "installing"
+  | "up-to-date"
+  | "error";
 
-function toSlots(arr: string[]): [string, string, string] {
-  const s = arr.concat(["", "", ""]).slice(0, 3);
-  return [s[0], s[1], s[2]];
+function toSlots(arr: string[]): [string, string, string, string] {
+  const s = arr.concat(["", "", "", ""]).slice(0, 4);
+  return [s[0], s[1], s[2], s[3]];
 }
 
 export function Settings({
@@ -21,7 +27,12 @@ export function Settings({
   onClose: () => void;
   onSave: (providers: string[]) => void;
 }) {
-  const [slots, setSlots] = useState<[string, string, string]>(["", "", ""]);
+  const [slots, setSlots] = useState<[string, string, string, string]>([
+    "",
+    "",
+    "",
+    "",
+  ]);
   const [seeded, setSeeded] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateState, setUpdateState] = useState<UpdateState>("idle");
@@ -35,7 +46,7 @@ export function Settings({
 
   function setSlot(i: number, val: string) {
     setSlots((prev) => {
-      const next = [...prev] as [string, string, string];
+      const next = [...prev] as [string, string, string, string];
       next[i] = val;
       return next;
     });
@@ -52,8 +63,10 @@ export function Settings({
     setUpdateState("checking");
     try {
       const info = await checkForUpdate();
-      if (info) { setUpdateInfo(info); setUpdateState("available"); }
-      else setUpdateState("up-to-date");
+      if (info) {
+        setUpdateInfo(info);
+        setUpdateState("available");
+      } else setUpdateState("up-to-date");
     } catch {
       setUpdateState("error");
     }
@@ -72,7 +85,10 @@ export function Settings({
 
   return (
     <div className="modal-overlay" onClick={onClose}>
-      <div className="modal modal-settings" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="modal modal-settings"
+        onClick={(e) => e.stopPropagation()}
+      >
         <h3 className="modal-title">Settings</h3>
 
         <form className="providers-form" onSubmit={handleSave}>
@@ -81,14 +97,22 @@ export function Settings({
             <input
               key={i}
               className="provider-input"
-              placeholder={i === 0 ? "ifconfig.me/ip" : i === 1 ? "ipify.ir" : "api.ipify.org"}
+              placeholder={
+                ["ip.shecan.ir", "ifconfig.me/ip", "api.ipify.org", "ipify.ir"][
+                  i
+                ]
+              }
               value={p}
               onChange={(e) => setSlot(i, e.target.value)}
             />
           ))}
           <div className="modal-actions">
-            <button type="button" className="modal-cancel" onClick={onClose}>Cancel</button>
-            <button type="submit" className="modal-save">Save</button>
+            <button type="button" className="modal-cancel" onClick={onClose}>
+              Cancel
+            </button>
+            <button type="submit" className="modal-save">
+              Save
+            </button>
           </div>
         </form>
 
@@ -101,15 +125,21 @@ export function Settings({
               </button>
             </div>
           )}
-          {updateState === "installing" && <span className="update-msg">Installing…</span>}
-          {updateState === "up-to-date" && <span className="update-msg">Already up to date.</span>}
+          {updateState === "installing" && (
+            <span className="update-msg">Installing…</span>
+          )}
+          {updateState === "up-to-date" && (
+            <span className="update-msg">Already up to date.</span>
+          )}
           {updateState === "error" && (
             <span className="update-msg update-err">Update check failed.</span>
           )}
           <button
             className="update-check-btn"
             onClick={handleCheckUpdate}
-            disabled={updateState === "checking" || updateState === "installing"}
+            disabled={
+              updateState === "checking" || updateState === "installing"
+            }
           >
             {updateState === "checking" ? "Checking…" : "Check for updates"}
           </button>

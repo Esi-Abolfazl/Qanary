@@ -55,6 +55,9 @@ pub struct ServiceList {
     #[serde(default)]
     pub icon: String,
     pub services: Vec<Service>,
+    /// Whether the list is collapsed in the UI. Persisted so it survives restarts.
+    #[serde(default)]
+    pub collapsed: bool,
 }
 
 impl ServiceList {
@@ -64,6 +67,7 @@ impl ServiceList {
             name: name.to_string(),
             icon: icon.to_string(),
             services,
+            collapsed: false,
         }
     }
 }
@@ -90,9 +94,10 @@ fn default_timeout() -> u64 {
 fn default_ip_providers() -> Vec<String> {
     // Stored without scheme; fetch_wan prepends https:// at call time.
     vec![
+        "ip.shecan.ir".into(),
         "ifconfig.me/ip".into(),
-        "ipify.ir".into(),
         "api.ipify.org".into(),
+        "ipify.ir".into(),
     ]
 }
 
@@ -181,6 +186,7 @@ pub struct ListStatus {
     pub icon: String,
     pub services: Vec<ServiceStatus>,
     pub all_down: bool,
+    pub collapsed: bool,
 }
 
 /// WAN IP + geolocation for the header.

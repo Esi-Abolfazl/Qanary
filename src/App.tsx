@@ -4,14 +4,15 @@ import * as api from "./api";
 import type { Config, Snapshot } from "./types";
 import { Header } from "./components/Header";
 import { ServiceList } from "./components/ServiceList";
-import { AddServiceForm } from "./components/AddServiceForm";
 import { Settings } from "./components/Settings";
 import { ListModal } from "./components/ListModal";
+import { AddServiceModal } from "./components/AddServiceModal";
 
 type ModalState =
   | null
   | { kind: "addList" }
   | { kind: "editList"; id: string; name: string; icon: string }
+  | { kind: "addService"; listId: string; listName: string }
   | { kind: "settings" };
 
 function App() {
@@ -41,6 +42,13 @@ function App() {
     setSnapshot(s);
   }
 
+  async function handleAddService(label: string, host: string, port: number | undefined) {
+    if (modal?.kind !== "addService") return;
+    await api.addService(modal.listId, label, host, port);
+    const s = await api.refreshNow();
+    setSnapshot(s);
+  }
+
   return (
     <main className="app">
       <Header
@@ -61,15 +69,11 @@ function App() {
             onRemoveService={(lid, sid) => api.removeService(lid, sid)}
             onRemoveList={(lid) => api.removeList(lid)}
             onEditList={(id, name, icon) => setModal({ kind: "editList", id, name, icon })}
+            onAddService={(listId, listName) => setModal({ kind: "addService", listId, listName })}
           />
         ))}
         {lists.length === 0 && <p className="loading">Starting first probe…</p>}
       </div>
-
-      <AddServiceForm
-        lists={lists.map((l) => ({ id: l.id, name: l.name, icon: l.icon }))}
-        onAdd={(listId, label, host, port) => api.addService(listId, label, host, port)}
-      />
 
       {(modal?.kind === "addList" || modal?.kind === "editList") && (
         <ListModal
@@ -80,6 +84,14 @@ function App() {
               : { name: "", icon: "" }
           }
           onSave={handleSaveList}
+          onClose={() => setModal(null)}
+        />
+      )}
+
+      {modal?.kind === "addService" && (
+        <AddServiceModal
+          listName={modal.listName}
+          onAdd={handleAddService}
           onClose={() => setModal(null)}
         />
       )}

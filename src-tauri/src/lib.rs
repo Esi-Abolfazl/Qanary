@@ -127,6 +127,7 @@ pub fn run() {
             commands::remove_list,
             commands::reset_config,
             commands::update_settings,
+            commands::set_list_collapsed,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

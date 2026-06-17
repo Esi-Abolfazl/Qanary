@@ -27,6 +27,9 @@ export const removeList = (listId: string) => invoke<Config>("remove_list", { li
 
 export const resetConfig = () => invoke<Config>("reset_config");
 
+export const setListCollapsed = (listId: string, collapsed: boolean) =>
+  invoke<void>("set_list_collapsed", { listId, collapsed });
+
 export const updateSettings = (probeIntervalSecs?: number, timeoutMs?: number, ipProviders?: string[]) =>
   invoke<Config>("update_settings", {
     probeIntervalSecs: probeIntervalSecs ?? null,
