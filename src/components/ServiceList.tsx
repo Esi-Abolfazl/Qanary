@@ -58,10 +58,10 @@ export function ServiceList({
   return (
     <section className="list">
       <div className="list-head">
-        <h2 className="list-name">
-          {list.icon && <span className="list-icon">{list.icon}</span>}
-          {list.name}
-        </h2>
+        <span className="list-name">
+          {list.icon && <span className="list-name-icon">{list.icon}</span>}
+          <h2 className="list-name-text">{list.name}</h2>
+        </span>
         <button
           className="list-menu-btn"
           onClick={() => onAddService(list.id, list.name)}

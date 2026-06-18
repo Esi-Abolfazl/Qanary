@@ -31,6 +31,15 @@ export function ServiceRow({
   return (
     <li className="row">
       <span className={`dot dot-${status.state}`} title={STATE_TITLE[status.state]} />
+      <img
+        className="row-favicon"
+        src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(status.host)}&sz=32`}
+        alt=""
+        loading="lazy"
+        onError={(e) => {
+          e.currentTarget.style.visibility = "hidden";
+        }}
+      />
       <span className="row-label">{status.label}</span>
       <span className="row-host">{status.host}</span>
       <span className="row-latency">{latency}</span>
