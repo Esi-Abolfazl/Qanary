@@ -9,12 +9,14 @@ export function ServiceList({
   onRemoveList,
   onEditList,
   onAddService,
+  onEditService,
 }: {
   list: ListStatus;
   onRemoveService: (listId: string, serviceId: string) => Promise<unknown>;
   onRemoveList: (listId: string) => Promise<unknown>;
   onEditList: (listId: string, name: string, icon: string) => void;
   onAddService: (listId: string, listName: string) => void;
+  onEditService: (listId: string, serviceId: string) => void;
 }) {
   const banner = list.all_down;
   const [menuOpen, setMenuOpen] = useState(false);
@@ -114,6 +116,7 @@ export function ServiceList({
                 key={s.id}
                 status={s}
                 onRemove={() => onRemoveService(list.id, s.id)}
+                onEdit={() => onEditService(list.id, s.id)}
               />
             ))}
             {list.services.length === 0 && (

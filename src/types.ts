@@ -6,12 +6,19 @@ export type Severity = "green" | "red";
 
 // ----- Runtime snapshot (read-only, pushed from the backend) -----
 
-export interface ServiceStatus {
+export interface EndpointStatus {
   id: string;
-  label: string;
   host: string;
   state: ServiceState;
   latency_ms: number | null;
+}
+
+export interface ServiceStatus {
+  id: string;
+  label: string;
+  /** Worst-wins state across all endpoints. Drives the service dot color. */
+  state: ServiceState;
+  endpoints: EndpointStatus[];
 }
 
 export interface ListStatus {
@@ -38,12 +45,17 @@ export interface Snapshot {
 
 // ----- Persisted config (returned by mutation commands) -----
 
+export interface Endpoint {
+  id: string;
+  host: string;
+  port: number;
+}
+
 export interface Service {
   id: string;
   label: string;
-  host: string;
-  port: number;
   enabled: boolean;
+  endpoints: Endpoint[];
 }
 
 export interface ServiceList {
@@ -59,4 +71,16 @@ export interface Config {
   probe_interval_secs: number;
   timeout_ms: number;
   ip_providers: string[];
+}
+
+// ----- Input types for add/edit commands -----
+
+export interface EndpointDraft {
+  host: string;
+  port?: number;
+}
+
+export interface ServiceDraft {
+  label: string;
+  endpoints: EndpointDraft[];
 }

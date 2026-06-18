@@ -1,18 +1,20 @@
 import { useEffect, useState } from "react";
 import "./App.css";
 import * as api from "./api";
-import type { Config, Snapshot } from "./types";
+import type { Config, ServiceDraft, Snapshot } from "./types";
 import { Header } from "./components/Header";
 import { ServiceList } from "./components/ServiceList";
 import { Settings } from "./components/Settings";
 import { ListModal } from "./components/ListModal";
-import { AddServiceModal } from "./components/AddServiceModal";
+import { ServiceModal } from "./components/ServiceModal";
+import { serviceToText } from "./utils/parseServices";
 
 type ModalState =
   | null
   | { kind: "addList" }
   | { kind: "editList"; id: string; name: string; icon: string }
   | { kind: "addService"; listId: string; listName: string }
+  | { kind: "editService"; listId: string; serviceId: string; listName: string; initial: string }
   | { kind: "settings" };
 
 function App() {
@@ -38,13 +40,26 @@ function App() {
       const cfg = await api.updateList(modal.id, name, icon);
       setConfig(cfg);
     }
-    // snapshot arrives via status-update listener (checking → resolved)
   }
 
-  async function handleAddService(label: string, host: string, port: number | undefined) {
-    if (modal?.kind !== "addService") return;
-    await api.addService(modal.listId, label, host, port);
-    // snapshot arrives via status-update listener (checking → resolved)
+  async function handleSaveService(drafts: ServiceDraft[]) {
+    if (modal?.kind === "addService") {
+      const cfg = await api.addServices(modal.listId, drafts);
+      setConfig(cfg);
+    } else if (modal?.kind === "editService") {
+      // Edit: use only the first parsed draft
+      const draft = drafts[0];
+      if (!draft) return;
+      const cfg = await api.updateService(modal.listId, modal.serviceId, draft.label, draft.endpoints);
+      setConfig(cfg);
+    }
+  }
+
+  function handleOpenEdit(listId: string, serviceId: string, listName: string) {
+    const list = config?.lists.find((l) => l.id === listId);
+    const svc = list?.services.find((s) => s.id === serviceId);
+    if (!svc) return;
+    setModal({ kind: "editService", listId, serviceId, listName, initial: serviceToText(svc) });
   }
 
   return (
@@ -54,9 +69,7 @@ function App() {
         onRefresh={() => api.refreshNow().then(setSnapshot)}
         onAddList={() => setModal({ kind: "addList" })}
         onOpenSettings={() => setModal({ kind: "settings" })}
-        onResetConfig={() =>
-          api.resetConfig().then(() => window.location.reload())
-        }
+        onResetConfig={() => api.resetConfig().then(() => window.location.reload())}
       />
 
       <div className="lists">
@@ -68,6 +81,7 @@ function App() {
             onRemoveList={(lid) => api.removeList(lid)}
             onEditList={(id, name, icon) => setModal({ kind: "editList", id, name, icon })}
             onAddService={(listId, listName) => setModal({ kind: "addService", listId, listName })}
+            onEditService={(listId, serviceId) => handleOpenEdit(listId, serviceId, list.name)}
           />
         ))}
         {lists.length === 0 && <p className="loading">Starting first probe…</p>}
@@ -86,10 +100,12 @@ function App() {
         />
       )}
 
-      {modal?.kind === "addService" && (
-        <AddServiceModal
+      {(modal?.kind === "addService" || modal?.kind === "editService") && (
+        <ServiceModal
+          mode={modal.kind === "addService" ? "add" : "edit"}
           listName={modal.listName}
-          onAdd={handleAddService}
+          initial={modal.kind === "editService" ? modal.initial : undefined}
+          onSave={handleSaveService}
           onClose={() => setModal(null)}
         />
       )}

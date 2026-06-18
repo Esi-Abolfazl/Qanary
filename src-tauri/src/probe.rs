@@ -1,21 +1,21 @@
-//! The probe engine: decide whether each service is Up / Blocked / Down, then roll the per-service
-//! results up into per-list and overall severity.
+//! The probe engine: decide whether each endpoint is Up / Blocked / Down, roll up to per-service
+//! and per-list status, then compute overall severity.
 //!
 //! Strategy (light but censorship-aware):
-//!  1. **TCP connect** to `host:port` with a timeout. If it fails (DNS error, refused, timeout) the
-//!     service looks like it has no route → `Down`.
+//!  1. **TCP connect** to `host:port` with a timeout. If it fails (DNS error, refused, timeout)
+//!     the endpoint has no route → `Down`.
 //!  2. If TCP succeeds, send a tiny **HTTPS HEAD** request. If the server answers *anything* the
-//!     service is `Up`. If the TLS/HTTP layer errors even though TCP connected, that's the classic
-//!     fingerprint of interception (bad cert, reset mid-handshake, hang) → `Blocked`.
+//!     endpoint is `Up`. If the TLS/HTTP layer errors even though TCP connected, that's the classic
+//!     fingerprint of interception → `Blocked`.
 //!
 //! HEAD pulls almost no bytes, and we cap concurrency, so a full cycle is cheap on bandwidth.
 //!
 //! Known limitation: a block page that returns HTTP 200 over a *valid* cert can't be told apart
-//! from the real site by this method; it will read as `Up`. Detecting that needs content
-//! heuristics we deliberately skip for v1.
+//! from the real site by this method; it will read as `Up`.
 
 use crate::models::{
-    Config, ListStatus, ServiceList, ServiceState, ServiceStatus, Severity,
+    Config, EndpointStatus, ListStatus, ServiceList, ServiceState, ServiceStatus, Severity,
+    worst_state,
 };
 use std::sync::Arc;
 use std::time::{Duration, Instant};
@@ -23,7 +23,7 @@ use tokio::net::TcpStream;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
-/// Max simultaneous probes. Keeps bursts small even with many user-added services.
+/// Max simultaneous probes. Bounds endpoint-level concurrency even with many-endpoint services.
 const MAX_CONCURRENT: usize = 8;
 
 /// Pure classifier — exercised directly by unit tests.
@@ -39,8 +39,8 @@ pub fn classify(tcp_ok: bool, http_ok: bool) -> ServiceState {
     }
 }
 
-/// Probe one service. Returns its state and the TCP-connect latency (when it connected).
-async fn probe_service(
+/// Probe one endpoint. Returns its state and the TCP-connect latency (when it connected).
+async fn probe_endpoint(
     client: &reqwest::Client,
     host: &str,
     port: u16,
@@ -71,11 +71,6 @@ async fn probe_service(
     (classify(tcp_ok, http_ok), latency_ms)
 }
 
-/// `true` when a list has at least one enabled service and every one of them is failing.
-fn compute_all_down(statuses: &[ServiceStatus]) -> bool {
-    !statuses.is_empty() && statuses.iter().all(|s| s.state.is_failure())
-}
-
 /// Any list fully down → Red; else Green.
 pub fn overall_severity(lists: &[ListStatus]) -> Severity {
     if lists.iter().any(|l| l.all_down) {
@@ -85,7 +80,7 @@ pub fn overall_severity(lists: &[ListStatus]) -> Severity {
     }
 }
 
-/// Build a synthetic snapshot with every enabled service in `Checking` state.
+/// Build a synthetic snapshot with every endpoint in `Checking` state.
 /// Pure (no I/O). Used to give instant visual feedback before a background probe resolves.
 pub fn checking_lists(config: &Config) -> Vec<ListStatus> {
     config
@@ -96,12 +91,23 @@ pub fn checking_lists(config: &Config) -> Vec<ListStatus> {
                 .services
                 .iter()
                 .filter(|s| s.enabled)
-                .map(|s| ServiceStatus {
-                    id: s.id.clone(),
-                    label: s.label.clone(),
-                    host: s.host.clone(),
-                    state: ServiceState::Checking,
-                    latency_ms: None,
+                .map(|s| {
+                    let endpoints: Vec<EndpointStatus> = s
+                        .endpoints
+                        .iter()
+                        .map(|ep| EndpointStatus {
+                            id: ep.id.clone(),
+                            host: ep.host.clone(),
+                            state: ServiceState::Checking,
+                            latency_ms: None,
+                        })
+                        .collect();
+                    ServiceStatus {
+                        id: s.id.clone(),
+                        label: s.label.clone(),
+                        state: ServiceState::Checking,
+                        endpoints,
+                    }
                 })
                 .collect();
             ListStatus {
@@ -125,7 +131,9 @@ pub async fn probe_all(config: &Config, client: &reqwest::Client) -> Vec<ListSta
 
     for list in &config.lists {
         let statuses = probe_list(list, client, &semaphore, timeout_ms).await;
-        let all_down = compute_all_down(&statuses);
+        let all_down = statuses.iter().any(|_| true) // at least one service exists
+            && !statuses.is_empty()
+            && statuses.iter().all(|s| s.fully_failing());
         result.push(ListStatus {
             id: list.id.clone(),
             name: list.name.clone(),
@@ -138,45 +146,66 @@ pub async fn probe_all(config: &Config, client: &reqwest::Client) -> Vec<ListSta
     result
 }
 
-/// Probe the enabled services of a single list, fanning out under the shared concurrency limit.
+/// Probe all enabled services of a single list, each fanning out to their endpoints.
 async fn probe_list(
     list: &ServiceList,
     client: &reqwest::Client,
     semaphore: &Arc<Semaphore>,
     timeout_ms: u64,
 ) -> Vec<ServiceStatus> {
-    let mut set: JoinSet<(usize, ServiceState, Option<u64>)> = JoinSet::new();
     let enabled: Vec<&_> = list.services.iter().filter(|s| s.enabled).collect();
+    let mut result = Vec::with_capacity(enabled.len());
 
-    for (idx, svc) in enabled.iter().enumerate() {
+    for svc in &enabled {
+        let ep_statuses = probe_service_endpoints(svc.id.as_str(), &svc.endpoints, client, semaphore, timeout_ms).await;
+        let svc_state = worst_state(&ep_statuses.iter().map(|e| e.state).collect::<Vec<_>>());
+        result.push(ServiceStatus {
+            id: svc.id.clone(),
+            label: svc.label.clone(),
+            state: svc_state,
+            endpoints: ep_statuses,
+        });
+    }
+    result
+}
+
+/// Probe all endpoints of one service concurrently under the shared semaphore.
+async fn probe_service_endpoints(
+    _svc_id: &str,
+    endpoints: &[crate::models::Endpoint],
+    client: &reqwest::Client,
+    semaphore: &Arc<Semaphore>,
+    timeout_ms: u64,
+) -> Vec<EndpointStatus> {
+    let mut set: JoinSet<(usize, ServiceState, Option<u64>)> = JoinSet::new();
+
+    for (idx, ep) in endpoints.iter().enumerate() {
         let permit = Arc::clone(semaphore);
         let client = client.clone();
-        let host = svc.host.clone();
-        let port = svc.port;
+        let host = ep.host.clone();
+        let port = ep.port;
         set.spawn(async move {
             let _guard = permit.acquire().await.expect("semaphore open");
-            let (state, latency) = probe_service(&client, &host, port, timeout_ms).await;
+            let (state, latency) = probe_endpoint(&client, &host, port, timeout_ms).await;
             (idx, state, latency)
         });
     }
 
-    // Collect results, then reorder to match the original service order.
-    let mut collected: Vec<Option<(ServiceState, Option<u64>)>> = vec![None; enabled.len()];
+    let mut collected: Vec<Option<(ServiceState, Option<u64>)>> = vec![None; endpoints.len()];
     while let Some(joined) = set.join_next().await {
         if let Ok((idx, state, latency)) = joined {
             collected[idx] = Some((state, latency));
         }
     }
 
-    enabled
+    endpoints
         .iter()
         .enumerate()
-        .map(|(idx, svc)| {
+        .map(|(idx, ep)| {
             let (state, latency_ms) = collected[idx].unwrap_or((ServiceState::Checking, None));
-            ServiceStatus {
-                id: svc.id.clone(),
-                label: svc.label.clone(),
-                host: svc.host.clone(),
+            EndpointStatus {
+                id: ep.id.clone(),
+                host: ep.host.clone(),
                 state,
                 latency_ms,
             }
@@ -187,24 +216,36 @@ async fn probe_list(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::models::{Endpoint, Service, ServiceList, Config};
 
-    fn status(state: ServiceState) -> ServiceStatus {
-        ServiceStatus {
-            id: "x".into(),
-            label: "x".into(),
-            host: "x".into(),
+    fn ep_status(state: ServiceState) -> EndpointStatus {
+        EndpointStatus {
+            id: "e".into(),
+            host: "h".into(),
             state,
             latency_ms: None,
         }
     }
 
-    fn list(states: &[ServiceState]) -> ListStatus {
-        let services: Vec<_> = states.iter().copied().map(status).collect();
+    fn svc_status(states: &[ServiceState]) -> ServiceStatus {
+        let endpoints: Vec<_> = states.iter().copied().map(ep_status).collect();
+        let state = worst_state(states);
+        ServiceStatus {
+            id: "s".into(),
+            label: "s".into(),
+            state,
+            endpoints,
+        }
+    }
+
+    fn list_status(svc_states: &[&[ServiceState]]) -> ListStatus {
+        let services: Vec<_> = svc_states.iter().map(|s| svc_status(s)).collect();
+        let all_down = !services.is_empty() && services.iter().all(|s| s.fully_failing());
         ListStatus {
             id: "l".into(),
             name: "l".into(),
             icon: "".into(),
-            all_down: compute_all_down(&services),
+            all_down,
             services,
             collapsed: false,
         }
@@ -219,19 +260,41 @@ mod tests {
     }
 
     #[test]
-    fn all_down_needs_every_service_failing() {
+    fn worst_state_precedence() {
         use ServiceState::*;
-        assert!(compute_all_down(&[status(Down), status(Blocked)]));
-        assert!(!compute_all_down(&[status(Down), status(Up)]));
-        assert!(!compute_all_down(&[status(Checking), status(Down)])); // Checking isn't a failure
-        assert!(!compute_all_down(&[])); // empty list is not "down"
+        assert_eq!(worst_state(&[Up, Blocked, Down]), Down);
+        assert_eq!(worst_state(&[Up, Blocked]), Blocked);
+        assert_eq!(worst_state(&[Up, Checking]), Checking);
+        assert_eq!(worst_state(&[Up]), Up);
+        assert_eq!(worst_state(&[]), Checking); // empty → Checking
+    }
+
+    #[test]
+    fn fully_failing_requires_all_endpoints_fail() {
+        use ServiceState::*;
+        assert!(svc_status(&[Down, Blocked]).fully_failing());
+        assert!(!svc_status(&[Down, Up]).fully_failing());
+        assert!(!svc_status(&[Checking, Down]).fully_failing()); // Checking is not a failure
+        assert!(!svc_status(&[]).fully_failing());               // empty endpoints → not failing
+    }
+
+    #[test]
+    fn all_down_needs_every_service_fully_failing() {
+        use ServiceState::*;
+        // list with one fully-failing and one partially-up service → NOT all_down
+        assert!(!list_status(&[&[Down, Down], &[Down, Up]]).all_down);
+        // list where every service is fully failing → all_down
+        assert!(list_status(&[&[Down, Blocked], &[Down]]).all_down);
+        // Checking endpoint prevents fully_failing
+        assert!(!list_status(&[&[Checking, Down]]).all_down);
     }
 
     #[test]
     fn checking_lists_all_checking_not_down() {
-        use crate::models::{Config, Service, ServiceList};
-        let svc_a = Service::new("A", "a.com");
-        let svc_b = Service::new("B", "b.com");
+        let ep_a = Endpoint::new("a.com", 443);
+        let svc_a = Service::with_endpoints("A", vec![ep_a]);
+        let ep_b = Endpoint::new("b.com", 443);
+        let svc_b = Service::with_endpoints("B", vec![ep_b]);
         let config = Config {
             lists: vec![ServiceList {
                 id: "l1".into(),
@@ -248,13 +311,13 @@ mod tests {
         assert_eq!(lists.len(), 1);
         assert!(!lists[0].all_down);
         assert!(lists[0].services.iter().all(|s| s.state == ServiceState::Checking));
+        assert!(lists[0].services.iter().all(|s| s.endpoints.iter().all(|e| e.state == ServiceState::Checking)));
     }
 
     #[test]
     fn severity_any_list_down_is_red() {
         use ServiceState::*;
-        assert_eq!(overall_severity(&[list(&[Down, Down]), list(&[Up])]), Severity::Red);
-        assert_eq!(overall_severity(&[list(&[Up]), list(&[Up])]), Severity::Green);
-        assert_eq!(overall_severity(&[list(&[Up])]), Severity::Green);
+        assert_eq!(overall_severity(&[list_status(&[&[Down, Down]]), list_status(&[&[Up]])]), Severity::Red);
+        assert_eq!(overall_severity(&[list_status(&[&[Up]]), list_status(&[&[Up]])]), Severity::Green);
     }
 }

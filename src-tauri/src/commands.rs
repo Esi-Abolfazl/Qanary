@@ -4,9 +4,24 @@
 //! updated config immediately, and kick off a fresh probe cycle in the background (so the UI also
 //! gets a `status-update` event without the command having to wait for every probe to finish).
 
-use crate::models::{Config, Service, ServiceList, Snapshot};
+use crate::models::{Config, Endpoint, Service, ServiceList, Snapshot};
 use crate::state::AppState;
+use serde::Deserialize;
 use tauri::{AppHandle, Manager, State};
+
+/// Incoming endpoint spec from the frontend (host + optional port).
+#[derive(Debug, Deserialize)]
+pub struct EndpointDraft {
+    pub host: String,
+    pub port: Option<u16>,
+}
+
+/// Incoming service spec from the frontend (label + one or more endpoints).
+#[derive(Debug, Deserialize)]
+pub struct ServiceDraft {
+    pub label: String,
+    pub endpoints: Vec<EndpointDraft>,
+}
 
 #[tauri::command]
 pub fn get_snapshot(state: State<AppState>) -> Option<Snapshot> {
@@ -25,21 +40,46 @@ pub async fn refresh_now(app: AppHandle) -> Snapshot {
     crate::run_cycle(&app, true).await
 }
 
+/// Add one or more services (each with their endpoints) to a list.
+/// Replaces the old single-host `add_service` command.
 #[tauri::command]
-pub fn add_service(
+pub fn add_services(app: AppHandle, list_id: String, services: Vec<ServiceDraft>) -> Config {
+    mutate(&app, |cfg| {
+        if let Some(list) = cfg.lists.iter_mut().find(|l| l.id == list_id) {
+            for draft in &services {
+                let endpoints: Vec<Endpoint> = draft
+                    .endpoints
+                    .iter()
+                    .filter(|e| !e.host.trim().is_empty())
+                    .map(|e| Endpoint::new(e.host.trim(), e.port.unwrap_or(443)))
+                    .collect();
+                if !endpoints.is_empty() {
+                    list.services.push(Service::with_endpoints(&draft.label, endpoints));
+                }
+            }
+        }
+    })
+}
+
+/// Replace a service's label and endpoints (wholesale edit).
+#[tauri::command]
+pub fn update_service(
     app: AppHandle,
     list_id: String,
+    service_id: String,
     label: String,
-    host: String,
-    port: Option<u16>,
+    endpoints: Vec<EndpointDraft>,
 ) -> Config {
     mutate(&app, |cfg| {
         if let Some(list) = cfg.lists.iter_mut().find(|l| l.id == list_id) {
-            let mut svc = Service::new(&label, &host);
-            if let Some(p) = port {
-                svc.port = p;
+            if let Some(svc) = list.services.iter_mut().find(|s| s.id == service_id) {
+                svc.label = label.clone();
+                svc.endpoints = endpoints
+                    .iter()
+                    .filter(|e| !e.host.trim().is_empty())
+                    .map(|e| Endpoint::new(e.host.trim(), e.port.unwrap_or(443)))
+                    .collect();
             }
-            list.services.push(svc);
         }
     })
 }

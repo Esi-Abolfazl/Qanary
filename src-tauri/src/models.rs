@@ -1,9 +1,9 @@
 //! Data types shared across the backend.
 //!
 //! Two groups live here:
-//!  - **Persisted** config (`Config`, `ServiceList`, `Service`) — saved to disk as JSON.
-//!  - **Runtime** snapshot (`Snapshot`, `ListStatus`, `ServiceStatus`, ...) — computed each probe
-//!    cycle and pushed to the UI. Snapshots are never written to disk.
+//!  - **Persisted** config (`Config`, `ServiceList`, `Service`, `Endpoint`) — saved to disk as JSON.
+//!  - **Runtime** snapshot (`Snapshot`, `ListStatus`, `ServiceStatus`, `EndpointStatus`) — computed
+//!    each probe cycle and pushed to the UI. Snapshots are never written to disk.
 //!
 //! The TypeScript side mirrors these in `src/types.ts`. Keep the two in sync.
 
@@ -14,16 +14,42 @@ use uuid::Uuid;
 // Persisted config
 // ---------------------------------------------------------------------------
 
-/// A single endpoint we probe (one host:port).
+/// One host:port pair belonging to a Service.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Endpoint {
+    pub id: String,
+    pub host: String,
+    #[serde(default = "default_port")]
+    pub port: u16,
+}
+
+impl Endpoint {
+    pub fn new(host: &str, port: u16) -> Self {
+        Endpoint {
+            id: Uuid::new_v4().to_string(),
+            host: host.to_string(),
+            port,
+        }
+    }
+}
+
+/// A named service with one or more endpoints to probe.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Service {
     pub id: String,
     pub label: String,
-    pub host: String,
-    #[serde(default = "default_port")]
-    pub port: u16,
     #[serde(default = "default_true")]
     pub enabled: bool,
+    #[serde(default)]
+    pub endpoints: Vec<Endpoint>,
+
+    // Legacy fields — only present in old configs written before the multi-endpoint
+    // model. Folded into `endpoints` by `store::migrate_legacy` on first load, then
+    // cleared. `skip_serializing` ensures they vanish from new writes.
+    #[serde(default, skip_serializing)]
+    pub host: Option<String>,
+    #[serde(default, skip_serializing)]
+    pub port: Option<u16>,
 }
 
 fn default_port() -> u16 {
@@ -34,14 +60,27 @@ fn default_true() -> bool {
 }
 
 impl Service {
-    /// New HTTPS service (port 443, enabled) with a fresh id.
+    /// New HTTPS service (port 443, enabled) with a single endpoint and a fresh id.
     pub fn new(label: &str, host: &str) -> Self {
         Service {
             id: Uuid::new_v4().to_string(),
             label: label.to_string(),
-            host: host.to_string(),
-            port: 443,
             enabled: true,
+            endpoints: vec![Endpoint::new(host, 443)],
+            host: None,
+            port: None,
+        }
+    }
+
+    /// New service with an explicit endpoint list.
+    pub fn with_endpoints(label: &str, endpoints: Vec<Endpoint>) -> Self {
+        Service {
+            id: Uuid::new_v4().to_string(),
+            label: label.to_string(),
+            enabled: true,
+            endpoints,
+            host: None,
+            port: None,
         }
     }
 }
@@ -108,20 +147,20 @@ impl Default for Config {
             "Global",
             "🌍",
             vec![
-                Service::new("Claude", "claude.ai"),
-                Service::new("Telegram", "telegram.org"),
-                Service::new("ChatGPT", "chatgpt.com"),
                 Service::new("Google", "google.com"),
+                Service::new("Telegram", "telegram.org"),
                 Service::new("X", "x.com"),
+                Service::new("Claude", "claude.ai"),
+                Service::new("ChatGPT", "chatgpt.com"),
             ],
         );
         let iran = ServiceList::new(
             "Iran",
             "🇮🇷",
             vec![
-                Service::new("Digikala", "digikala.com"),
                 Service::new("Torob", "torob.ir"),
                 Service::new("Divar", "divar.ir"),
+                Service::new("Digikala", "digikala.com"),
                 Service::new("Snapp", "snapp.ir"),
             ],
         );
@@ -138,13 +177,14 @@ impl Default for Config {
 // Runtime snapshot (computed, not persisted)
 // ---------------------------------------------------------------------------
 
-/// Result of probing one service in the latest cycle.
+/// Result of probing one endpoint in the latest cycle.
+/// Also used as the worst-wins rollup state for the whole Service dot.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ServiceState {
     /// Reachable: TCP connected and the server answered an HTTPS request.
     Up,
-    /// TCP connected but the TLS/HTTP layer failed like interception — likely blocked.
+    /// TCP connected but the TLS/HTTP layer failed — likely interception.
     Blocked,
     /// No route: DNS/TCP failed or timed out.
     Down,
@@ -158,6 +198,27 @@ impl ServiceState {
     pub fn is_failure(self) -> bool {
         matches!(self, ServiceState::Blocked | ServiceState::Down)
     }
+
+    /// Numeric rank for worst-wins comparison: higher = worse.
+    /// down(3) > blocked(2) > checking(1) > up(0)
+    fn rank(self) -> u8 {
+        match self {
+            ServiceState::Up => 0,
+            ServiceState::Checking => 1,
+            ServiceState::Blocked => 2,
+            ServiceState::Down => 3,
+        }
+    }
+}
+
+/// Worst-wins rollup over a slice of endpoint states.
+/// Empty slice → Checking (no data yet).
+pub fn worst_state(states: &[ServiceState]) -> ServiceState {
+    states
+        .iter()
+        .copied()
+        .max_by_key(|s| s.rank())
+        .unwrap_or(ServiceState::Checking)
 }
 
 /// Overall traffic-light severity.
@@ -168,17 +229,34 @@ pub enum Severity {
     Red,
 }
 
-/// Per-service status for the UI.
+/// Per-endpoint status for the UI.
 #[derive(Debug, Clone, Serialize)]
-pub struct ServiceStatus {
+pub struct EndpointStatus {
     pub id: String,
-    pub label: String,
     pub host: String,
     pub state: ServiceState,
     pub latency_ms: Option<u64>,
 }
 
-/// Per-list status + whether every enabled service is failing.
+/// Per-service status for the UI.
+/// `state` = worst-wins across all endpoints.
+/// A service is "fully failing" only when ALL endpoints are failing — that feeds `all_down`.
+#[derive(Debug, Clone, Serialize)]
+pub struct ServiceStatus {
+    pub id: String,
+    pub label: String,
+    pub state: ServiceState,
+    pub endpoints: Vec<EndpointStatus>,
+}
+
+impl ServiceStatus {
+    /// True when the service has endpoints and every one of them is failing.
+    pub fn fully_failing(&self) -> bool {
+        !self.endpoints.is_empty() && self.endpoints.iter().all(|e| e.state.is_failure())
+    }
+}
+
+/// Per-list status + whether every enabled service is fully failing.
 #[derive(Debug, Clone, Serialize)]
 pub struct ListStatus {
     pub id: String,

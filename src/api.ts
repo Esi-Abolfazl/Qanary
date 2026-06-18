@@ -3,7 +3,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { Config, Snapshot } from "./types";
+import type { Config, ServiceDraft, Snapshot } from "./types";
 
 export const getSnapshot = () => invoke<Snapshot | null>("get_snapshot");
 export const getConfig = () => invoke<Config>("get_config");
@@ -11,8 +11,17 @@ export const getConfig = () => invoke<Config>("get_config");
 /** Probe everything immediately and return the fresh snapshot. */
 export const refreshNow = () => invoke<Snapshot>("refresh_now");
 
-export const addService = (listId: string, label: string, host: string, port?: number) =>
-  invoke<Config>("add_service", { listId, label, host, port: port ?? null });
+/** Add one or more services (each with endpoints) to a list. */
+export const addServices = (listId: string, services: ServiceDraft[]) =>
+  invoke<Config>("add_services", { listId, services });
+
+/** Replace a service's label and endpoints (wholesale edit). */
+export const updateService = (
+  listId: string,
+  serviceId: string,
+  label: string,
+  endpoints: { host: string; port?: number }[],
+) => invoke<Config>("update_service", { listId, serviceId, label, endpoints });
 
 export const removeService = (listId: string, serviceId: string) =>
   invoke<Config>("remove_service", { listId, serviceId });

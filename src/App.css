@@ -244,6 +244,7 @@ body {
 .row {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 10px;
   padding: 9px 12px;
   border-top: 1px solid var(--panel-2);
@@ -465,6 +466,87 @@ body {
 }
 .modal-save:hover {
   filter: brightness(1.1);
+}
+
+/* ---------- Service modal (textarea variant) ---------- */
+
+.modal-textarea {
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  color: var(--text);
+  font-family: inherit;
+  font-size: 13px;
+  padding: 8px 10px;
+  resize: vertical;
+  min-height: 60px;
+}
+.modal-textarea:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+.modal-hint {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 2px 0 0;
+}
+.modal-error {
+  font-size: 12px;
+  color: var(--red);
+  margin: 2px 0 0;
+}
+
+/* ---------- Service row: edit button + multi-endpoint expander ---------- */
+
+.row-edit {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+  padding: 0 2px;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+.row:hover .row-edit {
+  opacity: 1;
+}
+.row-edit:hover {
+  color: var(--accent);
+}
+
+.row-endpoint-count {
+  background: none;
+  border: none;
+  color: var(--muted);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0;
+  flex: 1 1 auto;
+  text-align: left;
+}
+.row-endpoint-count:hover {
+  color: var(--text);
+}
+
+.endpoint-list {
+  list-style: none;
+  margin: 2px 0 2px 28px;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex-basis: 100%; /* force onto its own line inside the wrapping .row */
+}
+.endpoint-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--muted);
 }
 
 /* ---------- Settings (inside modal) ---------- */
