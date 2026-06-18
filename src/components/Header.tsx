@@ -23,8 +23,13 @@ export function Header({
   const wan = snapshot?.wan ?? null;
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
-  const [refreshBusy, setRefreshBusy] = useState(false);
   const [resetBusy, setResetBusy] = useState(false);
+  // Spin whenever a probe is in flight — covers both startup probe and manual
+  // refresh, since both push a snapshot with services in the `checking` state.
+  // null snapshot = first probe hasn't reported yet.
+  const refreshBusy =
+    snapshot === null ||
+    snapshot.lists.some((l) => l.services.some((s) => s.state === "checking"));
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -43,15 +48,6 @@ export function Header({
     setMenuOpen(false);
     setConfirmReset(false);
     action();
-  }
-
-  async function handleRefresh() {
-    setRefreshBusy(true);
-    try {
-      await onRefresh();
-    } finally {
-      setRefreshBusy(false);
-    }
   }
 
   function handleReset() {
@@ -130,7 +126,7 @@ export function Header({
       </div>
       <button
         className="refresh"
-        onClick={handleRefresh}
+        onClick={onRefresh}
         disabled={refreshBusy}
         title="Refresh now"
       >
