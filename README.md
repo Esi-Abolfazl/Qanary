@@ -9,6 +9,17 @@ aren't.
 - Shows WAN IP + country flag + short name.
 - Add your own services and lists. Config persisted as local JSON.
 
+## Adding services
+
+Add or edit services from the modal. Each non-blank line is one service.
+
+- **Custom ports** — write `host:port` to probe a specific port instead of the default 443. Example: `api.example.com:8080`.
+- **Multi-endpoint services** — comma-separate hosts on one line to group them under a single service. Example: `Mail: smtp.example.com:465, imap.example.com:993, mail.example.com`. The row shows a rolled-up count of reachable / blocked / down endpoints; expand it to see each endpoint with its own status and latency.
+- **Bulk input** — paste many lines at once to add a whole batch of services in one go. One service per line.
+- **Optional label** — prefix a line with `Label:` to name the service (`Search: google.com`). Without a label, the first host becomes the name.
+
+Each service can be edited or removed from its row's `⋯` menu.
+
 ## Stack
 
 - **Tauri v2** (Rust backend) + **React + Vite + TypeScript** frontend.

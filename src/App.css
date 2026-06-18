@@ -208,20 +208,24 @@ body {
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
 }
 .list-dropdown-item {
-  display: block;
+  align-items: center;
+  display: flex;
+  flex: 1 1 auto;
+  gap: 8px;
   width: 100%;
   background: none;
   border: none;
   color: var(--text);
   text-align: left;
-  padding: 8px 14px;
-  font-size: 13px;
+  padding: 8px;
+  font-size: 12px;
   cursor: pointer;
 }
 .list-dropdown-item:hover {
   background: var(--panel-2);
 }
 .list-dropdown-delete {
+  border-top: 1px solid #2a2f3a;
   color: var(--red);
 }
 
@@ -254,10 +258,15 @@ body {
 }
 
 .dot {
+  display: inline-block;
   width: 11px;
   height: 11px;
   border-radius: 50%;
   flex: 0 0 auto;
+}
+.dot-small {
+  width: 9px;
+  height: 9px;
 }
 .dot-up {
   background: var(--green);
@@ -519,12 +528,14 @@ body {
 }
 
 .row-endpoint-count {
+  display: flex;
+  justify-content: space-between;
   background: none;
   border: none;
   color: var(--muted);
   cursor: pointer;
-  font-size: 11px;
-  padding: 0;
+  font-size: 14px;
+  padding: 1;
   flex: 1 1 auto;
   text-align: left;
 }

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Severity, Snapshot } from "../types";
+import { Icon } from "./Icon";
 
 const SEVERITY_TEXT: Record<Severity, string> = {
   green: "All systems reachable",
@@ -65,7 +66,7 @@ export function Header({
           aria-haspopup="true"
           aria-expanded={menuOpen}
         >
-          ☰
+          <Icon name="menu" />
         </button>
         {menuOpen && (
           <div className="header-dropdown">
@@ -130,7 +131,7 @@ export function Header({
         disabled={refreshBusy}
         title="Refresh now"
       >
-        <span className={refreshBusy ? "spin" : ""}> ↻</span>
+        <Icon name="refresh" className={refreshBusy ? "spin" : ""} />
       </button>
     </header>
   );

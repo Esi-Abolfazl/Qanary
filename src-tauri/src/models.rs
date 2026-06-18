@@ -152,6 +152,22 @@ impl Default for Config {
                 Service::new("X", "x.com"),
                 Service::new("Claude", "claude.ai"),
                 Service::new("ChatGPT", "chatgpt.com"),
+                Service::with_endpoints(
+                    "Cursor",
+                    vec![
+                        Endpoint::new("cursor.com", 443),
+                        Endpoint::new("api2.cursor.sh", 443),
+                        Endpoint::new("api3.cursor.sh", 443),
+                        Endpoint::new("api4.cursor.sh", 443),
+                        Endpoint::new("api5.cursor.sh", 443),
+                        Endpoint::new("repo42.cursor.sh", 443),
+                        Endpoint::new("authentication.cursor.sh", 443),
+                        Endpoint::new("authenticator.cursor.sh", 443),
+                        Endpoint::new("marketplace.cursorapi.com", 443),
+                        Endpoint::new("cursor-cdn.com", 443),
+                        Endpoint::new("downloads.cursor.com", 443),
+                    ],
+                ),
             ],
         );
         let iran = ServiceList::new(

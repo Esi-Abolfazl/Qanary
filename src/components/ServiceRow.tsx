@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { ServiceState, ServiceStatus } from "../types";
+import { Icon } from "./Icon";
 
 const STATE_TITLE: Record<ServiceState, string> = {
   up: "Reachable",
@@ -34,7 +35,13 @@ export function ServiceRow({
   }, [menuOpen]);
 
   const multiEndpoint = status.endpoints.length > 1;
-  const failingCount = status.endpoints.filter((e) => e.state === "down" || e.state === "blocked").length;
+
+  const blockedCount = status.endpoints.filter(
+    (e) => e.state === "blocked",
+  ).length;
+  const reachedCount = status.endpoints.filter((e) => e.state === "up").length;
+  const downCount = status.endpoints.filter((e) => e.state === "down").length;
+
   const primaryEndpoint = status.endpoints[0];
 
   async function handleRemove() {
@@ -47,7 +54,9 @@ export function ServiceRow({
   }
 
   const singleLatency =
-    !multiEndpoint && status.state === "up" && primaryEndpoint?.latency_ms != null
+    !multiEndpoint &&
+    status.state === "up" &&
+    primaryEndpoint?.latency_ms != null
       ? `${primaryEndpoint.latency_ms} ms`
       : "";
 
@@ -55,13 +64,18 @@ export function ServiceRow({
 
   return (
     <li className="row">
-      <span className={`dot dot-${status.state}`} title={STATE_TITLE[status.state]} />
+      <span
+        className={`dot dot-${status.state}`}
+        title={STATE_TITLE[status.state]}
+      />
       <img
         className="row-favicon"
         src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(faviconHost)}&sz=32`}
         alt=""
         loading="lazy"
-        onError={(e) => { e.currentTarget.style.visibility = "hidden"; }}
+        onError={(e) => {
+          e.currentTarget.style.visibility = "hidden";
+        }}
       />
       <span className="row-label">{status.label}</span>
 
@@ -72,7 +86,34 @@ export function ServiceRow({
             onClick={() => setExpanded((x) => !x)}
             title={expanded ? "Collapse endpoints" : "Expand endpoints"}
           >
-            {status.endpoints.length} hosts{failingCount > 0 ? ` · ${failingCount} down` : ""} {expanded ? "▴" : "▾"}
+            <span>
+              {reachedCount > 0 ? (
+                <span>
+                  {" "}
+                  · {reachedCount} <span className="dot dot-small dot-up" />
+                </span>
+              ) : (
+                <></>
+              )}
+              {blockedCount > 0 ? (
+                <span>
+                  {" "}
+                  · {blockedCount}{" "}
+                  <span className="dot dot-small dot-blocked" />
+                </span>
+              ) : (
+                <></>
+              )}
+              {downCount > 0 ? (
+                <span>
+                  {" "}
+                  · {downCount} <span className="dot dot-small dot-down" />
+                </span>
+              ) : (
+                <></>
+              )}
+            </span>
+            <Icon name={expanded ? "chevronUp" : "chevronDown"} size={14} />
           </button>
         </>
       ) : (
@@ -88,19 +129,30 @@ export function ServiceRow({
           onClick={() => setMenuOpen((o) => !o)}
           title="Service options"
         >
-          ⋮
+          <Icon name="more" />
         </button>
         {menuOpen && (
           <div className="list-dropdown">
-            <button className="list-dropdown-item" onClick={() => { setMenuOpen(false); onEdit(); }}>
-              ✎ Edit
+            <button
+              className="list-dropdown-item"
+              onClick={() => {
+                setMenuOpen(false);
+                onEdit();
+              }}
+            >
+              <Icon name="edit" size={14} />
+              <span>Edit</span>
             </button>
             <button
               className="list-dropdown-item list-dropdown-delete"
-              onClick={() => { setMenuOpen(false); handleRemove(); }}
+              onClick={() => {
+                setMenuOpen(false);
+                handleRemove();
+              }}
               disabled={busy}
             >
-              × Remove
+              <Icon name="x" size={14} />
+              <span>Remove</span>
             </button>
           </div>
         )}
@@ -109,10 +161,16 @@ export function ServiceRow({
       {multiEndpoint && expanded && (
         <ul className="endpoint-list">
           {status.endpoints.map((ep) => {
-            const epLatency = ep.state === "up" && ep.latency_ms != null ? `${ep.latency_ms} ms` : "";
+            const epLatency =
+              ep.state === "up" && ep.latency_ms != null
+                ? `${ep.latency_ms} ms`
+                : "";
             return (
               <li key={ep.id} className="endpoint-row">
-                <span className={`dot dot-${ep.state}`} title={STATE_TITLE[ep.state]} />
+                <span
+                  className={`dot dot-${ep.state}`}
+                  title={STATE_TITLE[ep.state]}
+                />
                 <span className="row-host">{ep.host}</span>
                 <span className="row-latency">{epLatency}</span>
               </li>

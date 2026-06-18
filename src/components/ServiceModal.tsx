@@ -72,7 +72,7 @@ export function ServiceModal({
             <textarea
               ref={textareaRef}
               className="modal-textarea"
-              placeholder={"Label: host1.com, host2.com\nOther service: api.example.com"}
+              placeholder={"Label: host1.com, host2.com:8080, host3.com\nOther service: api.example.com"}
               value={text}
               onChange={(e) => { setText(e.target.value); setError(""); }}
               rows={mode === "edit" ? 2 : 5}

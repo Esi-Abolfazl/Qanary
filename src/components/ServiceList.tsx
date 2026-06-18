@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ListStatus } from "../types";
 import { ServiceRow } from "./ServiceRow";
+import { Icon } from "./Icon";
 import * as api from "../api";
 
 export function ServiceList({
@@ -69,7 +70,7 @@ export function ServiceList({
           onClick={() => onAddService(list.id, list.name)}
           title="Add service"
         >
-          +
+          <Icon name="plus" />
         </button>
         <div className="list-menu-wrap" ref={menuRef}>
           <button
@@ -77,7 +78,7 @@ export function ServiceList({
             onClick={() => setMenuOpen((o) => !o)}
             title="List options"
           >
-            ⋯
+            <Icon name="more" />
           </button>
           {menuOpen && (
             <div className="list-dropdown">
@@ -99,7 +100,7 @@ export function ServiceList({
           onClick={handleToggleCollapse}
           title={collapsed ? "Expand" : "Collapse"}
         >
-          {collapsed ? "▾" : "▴"}
+          <Icon name={collapsed ? "chevronDown" : "chevronUp"} />
         </button>
       </div>
 
