@@ -6,35 +6,77 @@ on:
       - 'v*'
 
 jobs:
-  release:
+  create-release:
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create.outputs.result }}
+    steps:
+      - uses: actions/github-script@v9
+        id: create
+        with:
+          script: |
+            const tag = process.env.GITHUB_REF_NAME
+            const { data } = await github.rest.repos.createRelease({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              tag_name: tag,
+              name: `Qanary ${tag}`,
+              body: 'See the changelog for details.',
+              draft: true,
+              prerelease: false,
+            })
+            return data.id
+
+  build:
+    needs: create-release
     permissions:
       contents: write
     strategy:
       fail-fast: false
       matrix:
         include:
-          - target: aarch64-apple-darwin
-            args: --target aarch64-apple-darwin
-          - target: x86_64-apple-darwin
-            args: --target x86_64-apple-darwin
+          - platform: macos-latest
+            target: aarch64-apple-darwin
+            args: --target aarch64-apple-darwin --bundles dmg,app
+          - platform: macos-latest
+            target: x86_64-apple-darwin
+            args: --target x86_64-apple-darwin --bundles dmg,app
+          - platform: windows-latest
+            target: x86_64-pc-windows-msvc
+            args: --target x86_64-pc-windows-msvc --bundles nsis
+          - platform: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+            args: --target x86_64-unknown-linux-gnu --bundles deb
 
-    runs-on: macos-latest
+    runs-on: ${{ matrix.platform }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v6
 
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 11.4.0
 
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v6
         with:
           node-version: 'lts/*'
           cache: pnpm
 
+      - name: Install Linux system dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
 
       - run: pnpm install
 
@@ -44,10 +86,71 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
-          tagName: ${{ github.ref_name }}
-          releaseName: 'Qanary ${{ github.ref_name }}'
-          releaseBody: |
-            See the changelog for details.
-          releaseDraft: false
-          prerelease: false
+          releaseId: ${{ needs.create-release.outputs.release_id }}
           args: ${{ matrix.args }}
+
+  publish:
+    needs: [create-release, build]
+    permissions:
+      contents: write
+    runs-on: ubuntu-latest
+    steps:
+      - name: Rename assets, patch latest.json, publish release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          VER="${TAG#v}"
+          REPO="${{ github.repository }}"
+          BASE="https://github.com/${REPO}/releases/download/${TAG}"
+
+          # original tauri name → friendly name
+          declare -A RENAMES=(
+            ["Qanary_${VER}_aarch64.dmg"]="Qanary_${TAG}_macOS_Apple_Silicon.dmg"
+            ["Qanary_${VER}_x64.dmg"]="Qanary_${TAG}_macOS_Intel.dmg"
+            ["Qanary_${VER}_x64-setup.exe"]="Qanary_${TAG}_Windows_x64.exe"
+            ["Qanary_${VER}_amd64.deb"]="Qanary_${TAG}_Linux_x64.deb"
+          )
+
+          for ORIG in "${!RENAMES[@]}"; do
+            NEW="${RENAMES[$ORIG]}"
+            gh release download "$TAG" --repo "$REPO" --pattern "$ORIG" --output "$ORIG" 2>/dev/null || continue
+            gh release delete-asset "$TAG" "$ORIG" --yes --repo "$REPO"
+            mv "$ORIG" "$NEW"
+            gh release upload "$TAG" "$NEW" --repo "$REPO"
+          done
+
+          # remove stale .sig files (signatures are embedded in latest.json)
+          for SIG in \
+            "Qanary_${VER}_x64-setup.exe.sig" \
+            "Qanary_${VER}_amd64.deb.sig" \
+            "Qanary_aarch64.app.tar.gz.sig" \
+            "Qanary_x64.app.tar.gz.sig"; do
+            gh release delete-asset "$TAG" "$SIG" --yes --repo "$REPO" 2>/dev/null || true
+          done
+
+          # patch latest.json URLs to match friendly names
+          gh release download "$TAG" --repo "$REPO" --pattern "latest.json" --output latest.json
+
+          # macOS updater uses .app.tar.gz (not DMG) — those files keep original names, URLs stay correct
+          # patch Linux and Windows (both the generic key and the bundle-type-specific key Tauri v2 generates)
+          jq --arg base "$BASE" --arg tag "$TAG" '
+            if .platforms["linux-x86_64"] then
+              .platforms["linux-x86_64"].url = "\($base)/Qanary_\($tag)_Linux_x64.deb"
+            else . end |
+            if .platforms["linux-x86_64-deb"] then
+              .platforms["linux-x86_64-deb"].url = "\($base)/Qanary_\($tag)_Linux_x64.deb"
+            else . end |
+            if .platforms["windows-x86_64"] then
+              .platforms["windows-x86_64"].url = "\($base)/Qanary_\($tag)_Windows_x64.exe"
+            else . end |
+            if .platforms["windows-x86_64-nsis"] then
+              .platforms["windows-x86_64-nsis"].url = "\($base)/Qanary_\($tag)_Windows_x64.exe"
+            else . end
+          ' latest.json > latest_patched.json
+
+          gh release delete-asset "$TAG" "latest.json" --yes --repo "$REPO"
+          gh release upload "$TAG" "latest_patched.json#latest.json" --repo "$REPO"
+
+          # go live
+          gh release edit "$TAG" --draft=false --repo "$REPO"
