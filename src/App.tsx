@@ -38,15 +38,13 @@ function App() {
       const cfg = await api.updateList(modal.id, name, icon);
       setConfig(cfg);
     }
-    const s = await api.refreshNow();
-    setSnapshot(s);
+    // snapshot arrives via status-update listener (checking → resolved)
   }
 
   async function handleAddService(label: string, host: string, port: number | undefined) {
     if (modal?.kind !== "addService") return;
     await api.addService(modal.listId, label, host, port);
-    const s = await api.refreshNow();
-    setSnapshot(s);
+    // snapshot arrives via status-update listener (checking → resolved)
   }
 
   return (
@@ -101,9 +99,7 @@ function App() {
         open={modal?.kind === "settings"}
         onClose={() => setModal(null)}
         onSave={(providers) =>
-          api.updateSettings(undefined, undefined, providers)
-            .then(setConfig)
-            .then(() => api.refreshNow().then(setSnapshot))
+          api.updateSettings(undefined, undefined, providers).then(setConfig)
         }
       />
     </main>

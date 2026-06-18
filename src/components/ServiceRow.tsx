@@ -1,3 +1,4 @@
+import { useState } from "react";
 import type { ServiceState, ServiceStatus } from "../types";
 
 const STATE_TITLE: Record<ServiceState, string> = {
@@ -12,10 +13,20 @@ export function ServiceRow({
   onRemove,
 }: {
   status: ServiceStatus;
-  onRemove: () => void;
+  onRemove: () => Promise<unknown>;
 }) {
+  const [busy, setBusy] = useState(false);
   const latency =
     status.state === "up" && status.latency_ms != null ? `${status.latency_ms} ms` : "";
+
+  async function handleRemove() {
+    setBusy(true);
+    try {
+      await onRemove();
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
     <li className="row">
@@ -23,7 +34,7 @@ export function ServiceRow({
       <span className="row-label">{status.label}</span>
       <span className="row-host">{status.host}</span>
       <span className="row-latency">{latency}</span>
-      <button className="row-remove" onClick={onRemove} title="Remove service">
+      <button className="row-remove" onClick={handleRemove} disabled={busy} title="Remove service">
         ×
       </button>
     </li>

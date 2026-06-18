@@ -45,7 +45,7 @@ mod tests {
         assert_eq!(loaded.lists.len(), original.lists.len());
         assert_eq!(loaded.probe_interval_secs, original.probe_interval_secs);
         assert_eq!(loaded.lists[0].services.len(), original.lists[0].services.len());
-        assert_eq!(loaded.ip_providers.len(), 3);
+        assert_eq!(loaded.ip_providers.len(), original.ip_providers.len());
 
         fs::remove_dir_all(&dir).ok();
     }

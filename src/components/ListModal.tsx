@@ -8,11 +8,12 @@ export function ListModal({
 }: {
   mode: "add" | "edit";
   initial: { name: string; icon: string };
-  onSave: (name: string, icon: string) => void;
+  onSave: (name: string, icon: string) => Promise<void>;
   onClose: () => void;
 }) {
   const [name, setName] = useState(initial.name);
   const [icon, setIcon] = useState(initial.icon);
+  const [busy, setBusy] = useState(false);
 
   // Re-seed when the modal opens for a different list.
   useEffect(() => {
@@ -20,11 +21,18 @@ export function ListModal({
     setIcon(initial.icon);
   }, [initial.name, initial.icon]);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     if (!name.trim()) return;
-    onSave(name.trim(), icon.trim());
-    onClose();
+    setBusy(true);
+    try {
+      await onSave(name.trim(), icon.trim());
+      onClose();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -40,6 +48,7 @@ export function ListModal({
               onChange={(e) => setIcon(e.target.value)}
               maxLength={4}
               aria-label="Icon"
+              disabled={busy}
             />
             <input
               className="modal-name-input"
@@ -48,11 +57,14 @@ export function ListModal({
               onChange={(e) => setName(e.target.value)}
               autoFocus
               aria-label="Name"
+              disabled={busy}
             />
           </div>
           <div className="modal-actions">
-            <button type="button" className="modal-cancel" onClick={onClose}>Cancel</button>
-            <button type="submit" className="modal-save">Save</button>
+            <button type="button" className="modal-cancel" onClick={onClose} disabled={busy}>Cancel</button>
+            <button type="submit" className="modal-save" disabled={busy}>
+              {busy ? "Saving…" : "Save"}
+            </button>
           </div>
         </form>
       </div>

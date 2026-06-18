@@ -7,18 +7,26 @@ export function AddServiceModal({
   onClose,
 }: {
   listName: string;
-  onAdd: (label: string, host: string, port: number | undefined) => void;
+  onAdd: (label: string, host: string, port: number | undefined) => Promise<void>;
   onClose: () => void;
 }) {
   const [label, setLabel] = useState("");
   const [host, setHost] = useState("");
+  const [busy, setBusy] = useState(false);
 
-  function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     const { host: cleanHost, port } = splitHostPort(host);
     if (!cleanHost) return;
-    onAdd(label.trim() || cleanHost, cleanHost, port);
-    onClose();
+    setBusy(true);
+    try {
+      await onAdd(label.trim() || cleanHost, cleanHost, port);
+      onClose();
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setBusy(false);
+    }
   }
 
   return (
@@ -33,6 +41,7 @@ export function AddServiceModal({
               value={label}
               onChange={(e) => setLabel(e.target.value)}
               aria-label="Label"
+              disabled={busy}
             />
           </div>
           <div className="modal-row">
@@ -43,11 +52,14 @@ export function AddServiceModal({
               onChange={(e) => setHost(e.target.value)}
               autoFocus
               aria-label="Host"
+              disabled={busy}
             />
           </div>
           <div className="modal-actions">
-            <button type="button" className="modal-cancel" onClick={onClose}>Cancel</button>
-            <button type="submit" className="modal-save">Add</button>
+            <button type="button" className="modal-cancel" onClick={onClose} disabled={busy}>Cancel</button>
+            <button type="submit" className="modal-save" disabled={busy}>
+              {busy ? "Adding…" : "Add"}
+            </button>
           </div>
         </form>
       </div>

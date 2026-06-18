@@ -21,6 +21,7 @@ pub fn get_config(state: State<AppState>) -> Config {
 /// Probe everything right now (also refreshes WAN) and return the resulting snapshot.
 #[tauri::command]
 pub async fn refresh_now(app: AppHandle) -> Snapshot {
+    crate::emit_checking(&app);
     crate::run_cycle(&app, true).await
 }
 
@@ -79,6 +80,7 @@ pub fn reset_config(app: AppHandle) -> Config {
     if let Err(err) = crate::store::save(&state.config_path, &defaults) {
         eprintln!("qanary: failed to save reset config: {err}");
     }
+    crate::emit_checking(&app);
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
         crate::run_cycle(&handle, true).await;
@@ -150,7 +152,8 @@ fn mutate<F: FnOnce(&mut Config)>(app: &AppHandle, f: F) -> Config {
     if let Err(err) = crate::store::save(&state.config_path, &updated) {
         eprintln!("qanary: failed to save config: {err}");
     }
-    // Re-probe in the background so the change shows up without blocking this command.
+    // Show affected services as Checking instantly, then re-probe in the background.
+    crate::emit_checking(app);
     let handle = app.clone();
     tauri::async_runtime::spawn(async move {
         crate::run_cycle(&handle, false).await;

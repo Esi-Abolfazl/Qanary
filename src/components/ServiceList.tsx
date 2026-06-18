@@ -11,14 +11,15 @@ export function ServiceList({
   onAddService,
 }: {
   list: ListStatus;
-  onRemoveService: (listId: string, serviceId: string) => void;
-  onRemoveList: (listId: string) => void;
+  onRemoveService: (listId: string, serviceId: string) => Promise<unknown>;
+  onRemoveList: (listId: string) => Promise<unknown>;
   onEditList: (listId: string, name: string, icon: string) => void;
   onAddService: (listId: string, listName: string) => void;
 }) {
   const banner = list.all_down;
   const [menuOpen, setMenuOpen] = useState(false);
   const [collapsed, setCollapsed] = useState(list.collapsed);
+  const [deleteBusy, setDeleteBusy] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -32,10 +33,14 @@ export function ServiceList({
     return () => document.removeEventListener("mousedown", handleClick);
   }, [menuOpen]);
 
-  function handleDelete() {
+  async function handleDelete() {
     setMenuOpen(false);
-    if (window.confirm(`Delete "${list.name}"?`)) {
-      onRemoveList(list.id);
+    if (!window.confirm(`Delete "${list.name}"?`)) return;
+    setDeleteBusy(true);
+    try {
+      await onRemoveList(list.id);
+    } finally {
+      setDeleteBusy(false);
     }
   }
 
@@ -74,8 +79,14 @@ export function ServiceList({
           </button>
           {menuOpen && (
             <div className="list-dropdown">
-              <button className="list-dropdown-item" onClick={handleEdit}>Edit</button>
-              <button className="list-dropdown-item list-dropdown-delete" onClick={handleDelete}>
+              <button className="list-dropdown-item" onClick={handleEdit}>
+                Edit
+              </button>
+              <button
+                className="list-dropdown-item list-dropdown-delete"
+                onClick={handleDelete}
+                disabled={deleteBusy}
+              >
                 Delete
               </button>
             </div>
@@ -86,20 +97,28 @@ export function ServiceList({
           onClick={handleToggleCollapse}
           title={collapsed ? "Expand" : "Collapse"}
         >
-          {collapsed ? "v" : "^"}
+          {collapsed ? "▾" : "▴"}
         </button>
       </div>
 
       {!collapsed && (
         <>
           {banner && (
-            <div className="banner banner-critical">All services unreachable</div>
+            <div className="banner banner-critical">
+              All services unreachable
+            </div>
           )}
           <ul className="rows">
             {list.services.map((s) => (
-              <ServiceRow key={s.id} status={s} onRemove={() => onRemoveService(list.id, s.id)} />
+              <ServiceRow
+                key={s.id}
+                status={s}
+                onRemove={() => onRemoveService(list.id, s.id)}
+              />
             ))}
-            {list.services.length === 0 && <li className="empty">No services yet</li>}
+            {list.services.length === 0 && (
+              <li className="empty">No services yet</li>
+            )}
           </ul>
         </>
       )}

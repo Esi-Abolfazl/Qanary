@@ -11,7 +11,7 @@ mod state;
 mod store;
 mod wan;
 
-use models::Snapshot;
+use models::{Snapshot};
 use state::AppState;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -56,6 +56,21 @@ pub async fn run_cycle(app: &tauri::AppHandle, refresh_wan: bool) -> Snapshot {
     snapshot
 }
 
+/// Emit a synthetic snapshot with all services in `Checking` state and store it.
+/// Sync (no probing). Used to give instant visual feedback before a background probe resolves.
+pub fn emit_checking(app: &tauri::AppHandle) {
+    let state = app.state::<AppState>();
+    let cfg = state.config.lock().unwrap().clone();
+    let wan = state.wan.lock().unwrap().clone();
+    let snapshot = Snapshot {
+        lists: probe::checking_lists(&cfg),
+        overall: models::Severity::Green,
+        wan,
+    };
+    *state.snapshot.lock().unwrap() = Some(snapshot.clone());
+    let _ = app.emit(EVENT_STATUS, &snapshot);
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
@@ -91,6 +106,10 @@ pub fn run() {
                 snapshot: Mutex::new(None),
                 wan: Mutex::new(None),
             });
+
+            // Emit a checking snapshot immediately so the UI shows lists on first paint
+            // instead of the "Starting first probe…" placeholder.
+            emit_checking(app.handle());
 
             // Background probe loop.
             let handle = app.handle().clone();

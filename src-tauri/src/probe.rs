@@ -85,6 +85,37 @@ pub fn overall_severity(lists: &[ListStatus]) -> Severity {
     }
 }
 
+/// Build a synthetic snapshot with every enabled service in `Checking` state.
+/// Pure (no I/O). Used to give instant visual feedback before a background probe resolves.
+pub fn checking_lists(config: &Config) -> Vec<ListStatus> {
+    config
+        .lists
+        .iter()
+        .map(|list| {
+            let services: Vec<ServiceStatus> = list
+                .services
+                .iter()
+                .filter(|s| s.enabled)
+                .map(|s| ServiceStatus {
+                    id: s.id.clone(),
+                    label: s.label.clone(),
+                    host: s.host.clone(),
+                    state: ServiceState::Checking,
+                    latency_ms: None,
+                })
+                .collect();
+            ListStatus {
+                id: list.id.clone(),
+                name: list.name.clone(),
+                icon: list.icon.clone(),
+                all_down: false,
+                services,
+                collapsed: list.collapsed,
+            }
+        })
+        .collect()
+}
+
 /// Probe every enabled service in `config` concurrently (bounded) and return per-list status.
 /// Disabled services are skipped entirely (not probed, not counted toward `all_down`).
 pub async fn probe_all(config: &Config, client: &reqwest::Client) -> Vec<ListStatus> {
@@ -194,6 +225,29 @@ mod tests {
         assert!(!compute_all_down(&[status(Down), status(Up)]));
         assert!(!compute_all_down(&[status(Checking), status(Down)])); // Checking isn't a failure
         assert!(!compute_all_down(&[])); // empty list is not "down"
+    }
+
+    #[test]
+    fn checking_lists_all_checking_not_down() {
+        use crate::models::{Config, Service, ServiceList};
+        let svc_a = Service::new("A", "a.com");
+        let svc_b = Service::new("B", "b.com");
+        let config = Config {
+            lists: vec![ServiceList {
+                id: "l1".into(),
+                name: "Test".into(),
+                icon: "".into(),
+                collapsed: false,
+                services: vec![svc_a, svc_b],
+            }],
+            probe_interval_secs: 30,
+            timeout_ms: 3000,
+            ip_providers: vec![],
+        };
+        let lists = checking_lists(&config);
+        assert_eq!(lists.len(), 1);
+        assert!(!lists[0].all_down);
+        assert!(lists[0].services.iter().all(|s| s.state == ServiceState::Checking));
     }
 
     #[test]

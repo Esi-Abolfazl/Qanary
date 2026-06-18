@@ -104,28 +104,26 @@ jobs:
           REPO="${{ github.repository }}"
           BASE="https://github.com/${REPO}/releases/download/${TAG}"
 
-          # original tauri name → friendly name
-          declare -A RENAMES=(
-            ["Qanary_${VER}_aarch64.dmg"]="Qanary_${TAG}_macOS_Apple_Silicon.dmg"
-            ["Qanary_${VER}_x64.dmg"]="Qanary_${TAG}_macOS_Intel.dmg"
-            ["Qanary_${VER}_x64-setup.exe"]="Qanary_${TAG}_Windows_x64.exe"
-            ["Qanary_${VER}_amd64.deb"]="Qanary_${TAG}_Linux_x64.deb"
-          )
+          # fetch asset list once — rename by arch/type pattern, not by version string
+          ASSETS=$(gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[].name')
 
-          for ORIG in "${!RENAMES[@]}"; do
-            NEW="${RENAMES[$ORIG]}"
-            gh release download "$TAG" --repo "$REPO" --pattern "$ORIG" --output "$ORIG" 2>/dev/null || continue
-            gh release delete-asset "$TAG" "$ORIG" --yes --repo "$REPO"
-            mv "$ORIG" "$NEW"
-            gh release upload "$TAG" "$NEW" --repo "$REPO"
-          done
+          rename_asset() {
+            local regex=$1 new_name=$2
+            local orig
+            orig=$(echo "$ASSETS" | grep -E "$regex" | head -1)
+            [ -z "$orig" ] && return
+            gh release download "$TAG" --repo "$REPO" --pattern "$orig" --output "$new_name"
+            gh release delete-asset "$TAG" "$orig" --yes --repo "$REPO"
+            gh release upload "$TAG" "$new_name" --repo "$REPO"
+          }
+
+          rename_asset '_aarch64\.dmg$'     "Qanary_${TAG}_macOS_Apple_Silicon.dmg"
+          rename_asset '_x64\.dmg$'         "Qanary_${TAG}_macOS_Intel.dmg"
+          rename_asset '_x64-setup\.exe$'   "Qanary_${TAG}_Windows_x64.exe"
+          rename_asset '_amd64\.deb$'       "Qanary_${TAG}_Linux_x64.deb"
 
           # remove stale .sig files (signatures are embedded in latest.json)
-          for SIG in \
-            "Qanary_${VER}_x64-setup.exe.sig" \
-            "Qanary_${VER}_amd64.deb.sig" \
-            "Qanary_aarch64.app.tar.gz.sig" \
-            "Qanary_x64.app.tar.gz.sig"; do
+          for SIG in $(echo "$ASSETS" | grep -E '\.(sig)$'); do
             gh release delete-asset "$TAG" "$SIG" --yes --repo "$REPO" 2>/dev/null || true
           done
 

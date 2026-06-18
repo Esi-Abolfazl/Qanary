@@ -14,7 +14,7 @@ export function Header({
   onResetConfig,
 }: {
   snapshot: Snapshot | null;
-  onRefresh: () => void;
+  onRefresh: () => Promise<void>;
   onAddList: () => void;
   onOpenSettings: () => void;
   onResetConfig: () => void;
@@ -23,6 +23,8 @@ export function Header({
   const wan = snapshot?.wan ?? null;
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
+  const [refreshBusy, setRefreshBusy] = useState(false);
+  const [resetBusy, setResetBusy] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -41,6 +43,20 @@ export function Header({
     setMenuOpen(false);
     setConfirmReset(false);
     action();
+  }
+
+  async function handleRefresh() {
+    setRefreshBusy(true);
+    try {
+      await onRefresh();
+    } finally {
+      setRefreshBusy(false);
+    }
+  }
+
+  function handleReset() {
+    setResetBusy(true);
+    pick(onResetConfig);
   }
 
   return (
@@ -62,7 +78,8 @@ export function Header({
                 <div className="header-dropdown-confirm-label">Reset to defaults?</div>
                 <button
                   className="header-dropdown-item header-dropdown-danger"
-                  onClick={() => pick(onResetConfig)}
+                  onClick={handleReset}
+                  disabled={resetBusy}
                 >
                   Yes, reset
                 </button>
@@ -111,7 +128,14 @@ export function Header({
           <span className="wan-ip">—</span>
         )}
       </div>
-      <button className="refresh" onClick={onRefresh} title="Refresh now">↻</button>
+      <button
+        className="refresh"
+        onClick={handleRefresh}
+        disabled={refreshBusy}
+        title="Refresh now"
+      >
+        <span className={refreshBusy ? "spin" : ""}> ↻</span>
+      </button>
     </header>
   );
 }
