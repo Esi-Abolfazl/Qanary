@@ -147,8 +147,12 @@ jobs:
             else . end
           ' latest.json > latest_patched.json
 
+          # the asset MUST be named latest.json — the updater endpoint fetches
+          # /latest/download/latest.json. `file#label` only sets a cosmetic label,
+          # not the filename, so upload a file actually named latest.json.
+          mv latest_patched.json latest.json
           gh release delete-asset "$TAG" "latest.json" --yes --repo "$REPO"
-          gh release upload "$TAG" "latest_patched.json#latest.json" --repo "$REPO"
+          gh release upload "$TAG" "latest.json" --repo "$REPO"
 
           # go live
           gh release edit "$TAG" --draft=false --repo "$REPO"
