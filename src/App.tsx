@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import "./App.css";
 import * as api from "./api";
 import type { Config, ServiceDraft, Snapshot } from "./types";
-import { Header } from "./components/Header";
+import { StatusHero } from "./components/StatusHero";
 import { ServiceList } from "./components/ServiceList";
 import { Settings } from "./components/Settings";
 import { ListModal } from "./components/ListModal";
@@ -64,7 +64,7 @@ function App() {
 
   return (
     <main className="app">
-      <Header
+      <StatusHero
         snapshot={snapshot}
         onRefresh={() => api.refreshNow().then(setSnapshot)}
         onAddList={() => setModal({ kind: "addList" })}

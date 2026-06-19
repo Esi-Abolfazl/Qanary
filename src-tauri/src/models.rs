@@ -150,7 +150,14 @@ impl Default for Config {
                 Service::new("Google", "google.com"),
                 Service::new("Telegram", "telegram.org"),
                 Service::new("X", "x.com"),
-                Service::new("Claude", "claude.ai"),
+                Service::with_endpoints(
+                    "Claude",
+                    vec![
+                        Endpoint::new("claude.ai", 443),
+                        Endpoint::new("platform.claude.com", 443),
+                        Endpoint::new("api.anthropic.com", 443),
+                    ],
+                ),
                 Service::new("ChatGPT", "chatgpt.com"),
                 Service::with_endpoints(
                     "Cursor",
