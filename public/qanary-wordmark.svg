@@ -1,0 +1,44 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 420 80" width="420" height="80" role="img" aria-label="Qanary — Early warning for your connections">
+  <defs>
+    <radialGradient id="wm-bg" cx="50%" cy="0%" r="125%">
+      <stop offset="0%" stop-color="#26241c"/>
+      <stop offset="70%" stop-color="#15140f"/>
+    </radialGradient>
+    <style>
+      .wm-title { fill: #1a1a17; }
+      .wm-q     { fill: #e0a300; }
+      .wm-sub   { fill: #8a857a; }
+      @media (prefers-color-scheme: dark) {
+        .wm-title { fill: #f4f1e8; }
+        .wm-q     { fill: #ffcc00; }
+        .wm-sub   { fill: #9a968a; }
+      }
+    </style>
+  </defs>
+
+  <!-- Icon backdrop -->
+  <rect x="0" y="0" width="80" height="80" rx="18" fill="url(#wm-bg)"/>
+
+  <!-- Canary bird, scaled to fit 80×80 (bird fits in ~62×60 area, centered) -->
+  <g transform="translate(11,10) scale(0.483)">
+    <path d="M40,66 L6,52 L20,82 Z" fill="#ffcc00"/>
+    <path d="M66,30 Q70,12 79,16 Q74,24 80,28 Z" fill="#ffcc00"/>
+    <path d="M78,26 Q86,11 94,18 Q86,24 90,30 Z" fill="#ffcc00"/>
+    <ellipse cx="54" cy="70" rx="31" ry="28" fill="#ffcc00"/>
+    <circle cx="83" cy="43" r="20" fill="#ffcc00"/>
+    <path d="M48,58 C66,57 78,70 77,90 C63,95 44,87 40,70 Z" fill="#000" opacity="0.12"/>
+    <path d="M100,39 L118,44 L100,50 Z" fill="#f2792b"/>
+    <circle cx="86" cy="41" r="6.4" fill="#15140f"/>
+    <circle cx="86" cy="41" r="3.8" fill="#1fb872"/>
+  </g>
+
+  <!-- Wordmark text -->
+  <text x="100" y="48"
+    font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif"
+    font-weight="700" font-size="42" letter-spacing="-0.8" class="wm-title">
+    <tspan class="wm-q">Q</tspan>anary
+  </text>
+  <text x="101" y="66"
+    font-family="-apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif"
+    font-size="13" letter-spacing="0.2" class="wm-sub">Early warning for your connections</text>
+</svg>

@@ -94,19 +94,22 @@ pub fn remove_service(app: AppHandle, list_id: String, service_id: String) -> Co
 }
 
 #[tauri::command]
-pub fn add_list(app: AppHandle, name: String, icon: String) -> Config {
+pub fn add_list(app: AppHandle, name: String, icon: String, critical: bool) -> Config {
     mutate(&app, |cfg| {
-        cfg.lists.push(ServiceList::new(&name, &icon, Vec::new()));
+        let mut list = ServiceList::new(&name, &icon, Vec::new());
+        list.critical = critical;
+        cfg.lists.push(list);
     })
 }
 
-/// Update an existing list's display name and icon.
+/// Update an existing list's display name, icon, and critical flag.
 #[tauri::command]
-pub fn update_list(app: AppHandle, list_id: String, name: String, icon: String) -> Config {
+pub fn update_list(app: AppHandle, list_id: String, name: String, icon: String, critical: bool) -> Config {
     mutate(&app, |cfg| {
         if let Some(list) = cfg.lists.iter_mut().find(|l| l.id == list_id) {
             list.name = name.clone();
             list.icon = icon.clone();
+            list.critical = critical;
         }
     })
 }

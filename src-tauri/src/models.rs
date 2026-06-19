@@ -97,6 +97,9 @@ pub struct ServiceList {
     /// Whether the list is collapsed in the UI. Persisted so it survives restarts.
     #[serde(default)]
     pub collapsed: bool,
+    /// When true, this list going fully down raises a Red alarm. Non-critical lists raise Yellow.
+    #[serde(default)]
+    pub critical: bool,
 }
 
 impl ServiceList {
@@ -107,6 +110,7 @@ impl ServiceList {
             icon: icon.to_string(),
             services,
             collapsed: false,
+            critical: false,
         }
     }
 }
@@ -177,7 +181,7 @@ impl Default for Config {
                 ),
             ],
         );
-        let iran = ServiceList::new(
+        let mut iran = ServiceList::new(
             "Iran",
             "🇮🇷",
             vec![
@@ -187,6 +191,7 @@ impl Default for Config {
                 Service::new("Snapp", "snapp.ir"),
             ],
         );
+        iran.critical = true;
         Config {
             lists: vec![global, iran],
             probe_interval_secs: default_interval(),
@@ -249,6 +254,9 @@ pub fn worst_state(states: &[ServiceState]) -> ServiceState {
 #[serde(rename_all = "lowercase")]
 pub enum Severity {
     Green,
+    /// A non-critical list went fully down — warn but don't alarm.
+    Yellow,
+    /// A critical list went fully down — full alarm.
     Red,
 }
 
@@ -288,6 +296,7 @@ pub struct ListStatus {
     pub services: Vec<ServiceStatus>,
     pub all_down: bool,
     pub collapsed: bool,
+    pub critical: bool,
 }
 
 /// WAN IP + geolocation for the header.

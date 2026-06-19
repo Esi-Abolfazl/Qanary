@@ -55,6 +55,9 @@ body {
 .hero-green {
   background: var(--wash-calm);
 }
+.hero-yellow {
+  background: var(--wash-warn);
+}
 .hero-red {
   background: var(--wash-alarm);
 }
@@ -86,36 +89,82 @@ body {
   margin-top: 2px;
 }
 
-/* The canary "egg" — pill holding the Severity dot. */
-.brandmark {
+/* Status indicator + refresh button — matches .icon-btn footprint. */
+.status-btn {
+  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 60px;
-  height: 44px;
   flex: 0 0 auto;
-  border-radius: var(--r-pill);
-  border: 2px solid var(--brand);
-  background: color-mix(in srgb, var(--brand) 16%, var(--bg-layer));
+  width: 32px;
+  height: 32px;
+  border-radius: var(--r-sm);
+  border: 1px solid var(--brand);
+  background: var(--bg-inset);
+  padding: 0;
+  cursor: pointer;
+  outline: none;
+  transition:
+    transform 0.15s ease,
+    border-color 0.4s ease;
 }
-.hero-red .brandmark {
+.hero-yellow .status-btn {
+  border-color: var(--state-blocked);
+}
+.hero-red .status-btn {
   border-color: var(--state-down);
-  background: color-mix(in srgb, var(--state-down) 14%, var(--bg-layer));
 }
-.brandmark-dot {
-  width: 18px;
-  height: 18px;
-  border-radius: var(--r-pill);
+.status-btn-inner {
+  position: relative;
+  width: 13px;
+  height: 13px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: opacity 0.15s;
+}
+.status-btn:hover:not(:disabled) .status-btn-inner {
+  opacity: 0;
+}
+
+.status-btn-dot {
+  position: relative;
+  width: 13px;
+  height: 13px;
+  border-radius: 4px;
   background: var(--state-up);
-  box-shadow: 0 0 10px var(--state-up);
+  box-shadow: 0 0 12px var(--state-up);
+  z-index: 1;
 }
-.brandmark-red .brandmark-dot {
+.hero-yellow .status-btn-dot {
+  background: var(--state-blocked);
+  box-shadow: 0 0 12px var(--state-blocked);
+}
+.hero-red .status-btn-dot {
   background: var(--state-down);
   box-shadow: 0 0 12px var(--state-down);
 }
-/* Heartbeat on alarm / while probing. */
-.brandmark-pulse {
+.status-btn-dot.qbreathe {
+  background: var(--brand);
+  box-shadow: 0 0 12px var(--brand);
+}
+/* Ping rings (shown during busy/loading). */
+.status-btn-ping {
+  position: absolute;
+  inset: 0;
+  border-radius: 4px;
+  background: var(--brand);
+  animation: qping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+.status-btn-ping + .status-btn-ping {
+  animation-delay: 0.8s;
+}
+/* Utility animation classes used by StatusButton. */
+.qhb {
   animation: heartbeat 1.4s ease-in-out infinite;
+}
+.qbreathe {
+  animation: qbreathe 2.4s ease-in-out infinite;
 }
 @keyframes heartbeat {
   0%,
@@ -129,10 +178,78 @@ body {
     transform: scale(1);
   }
 }
+@keyframes qping {
+  0% {
+    transform: scale(1);
+    opacity: 0.5;
+  }
+  75%,
+  100% {
+    transform: scale(2.4);
+    opacity: 0;
+  }
+}
+@keyframes qbreathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.18);
+    opacity: 0.78;
+  }
+}
+.status-btn:hover:not(:disabled) {
+  transform: scale(1.07);
+}
+/* Override global button:disabled opacity — animation already conveys busy */
+.status-btn:disabled {
+  opacity: 1;
+  cursor: default;
+  border-color: var(--border);
+}
+/* Refresh icon overlay — fades in on hover */
+.status-btn-hover-icon {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--r-sm);
+  background: color-mix(in srgb, var(--bg-base) 60%, transparent);
+  opacity: 0;
+  transition: opacity 0.15s;
+  color: var(--text-strong);
+}
+.status-btn:hover:not(:disabled) .status-btn-hover-icon {
+  opacity: 1;
+}
 @media (prefers-reduced-motion: reduce) {
-  .brandmark-pulse {
+  .status-btn-ping,
+  .qhb,
+  .qbreathe {
     animation: none;
   }
+}
+
+/* Canary logo mark in the hero — theme-adaptive fills, static eye (always green). */
+.logo-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  color: var(--state-up); /* eye = always green */
+  --mark-body: light-dark(#1a1a17, #ffcc00);
+  --mark-wing: light-dark(#ffffff, #000000);
+  --mark-eye-bg: light-dark(#fbfaf6, #15140f);
+}
+
+/* WAN + update button row */
+.hero-footer {
+  display: flex;
+  align-items: self-end;
+  justify-content: space-between;
 }
 
 /* WAN chip */
@@ -155,6 +272,42 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
+/* Update button */
+.update-btn {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  border: 1px solid var(--brand);
+  background: transparent;
+  color: var(--brand);
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+  min-width: 72px;
+  text-align: center;
+}
+.update-btn:hover:not(:disabled) {
+  background: var(--brand);
+  color: #fff;
+}
+.update-btn-progress {
+  cursor: default;
+  mask-image: linear-gradient(
+    to right,
+    black var(--pct, 0%),
+    rgba(0, 0, 0, 0.5) var(--pct, 0%)
+  );
+}
+.update-btn-ready {
+  background: var(--brand);
+  color: #fff;
+}
+.update-btn-ready:hover {
+  opacity: 0.85;
+}
+
 /* ---------- Icon buttons + menu (hero) ---------- */
 
 .icon-btn {
@@ -175,6 +328,8 @@ body {
 
 .hero-menu-wrap {
   position: relative;
+  display: flex;
+  align-items: center;
 }
 .menu-dropdown {
   position: absolute;
@@ -240,7 +395,7 @@ body {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: var(--r-md);
-  overflow: hidden;
+  overflow: visible;
 }
 .list-head {
   display: flex;
@@ -309,6 +464,10 @@ body {
   overflow: hidden;
   box-shadow: var(--elevation);
 }
+.list-dropdown-up {
+  top: auto;
+  bottom: calc(100% + 4px);
+}
 .list-dropdown-item {
   align-items: center;
   display: flex;
@@ -359,33 +518,79 @@ body {
   border-top: none;
 }
 
+/* Dot wrapper (16×16). Core + optional ping ring drawn via ::after / ::before. */
 .dot {
-  display: inline-block;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  background: none;
+  flex: 0 0 auto;
+}
+/* Core indicator */
+.dot::after {
+  content: "";
+  position: absolute;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+.dot-up::after {
+  background: var(--state-up);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--state-up) 22%, transparent);
+  animation: qbreathe 2.4s ease-in-out infinite;
+}
+.dot-blocked::after {
+  background: var(--state-blocked);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--state-blocked) 18%, transparent);
+}
+.dot-down::after {
+  background: var(--state-down);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--state-down) 18%, transparent);
+}
+.dot-checking::after {
+  background: var(--state-checking);
+}
+/* Ping ring for checking state */
+.dot-checking::before {
+  content: "";
+  position: absolute;
   width: 11px;
   height: 11px;
   border-radius: 50%;
-  flex: 0 0 auto;
+  background: var(--state-checking);
+  animation: qping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
+/* Small inline dots (in multi-endpoint count line) — no animation, no ring */
 .dot-small {
   width: 9px;
   height: 9px;
 }
-.dot-up {
-  background: var(--green);
+.dot-small::after {
+  width: 7px;
+  height: 7px;
+  box-shadow: none;
+  animation: none;
 }
-.dot-blocked {
-  background: var(--yellow);
+.dot-small::before {
+  display: none;
 }
-.dot-down {
-  background: var(--red);
+/* Endpoint sub-list dots — slightly smaller core */
+.endpoint-row .dot::after {
+  width: 7px;
+  height: 7px;
 }
-.dot-checking {
-  background: var(--grey);
-  animation: pulse 1.2s ease-in-out infinite;
+.endpoint-row .dot-checking::before {
+  width: 9px;
+  height: 9px;
 }
-@keyframes pulse {
-  50% {
-    opacity: 0.35;
+@media (prefers-reduced-motion: reduce) {
+  .dot-up::after,
+  .dot-checking::before {
+    animation: none;
   }
 }
 
@@ -542,6 +747,23 @@ body {
   padding: 7px 9px;
   font-size: 13px;
 }
+.modal-critical-btn {
+  align-self: flex-start;
+  background: var(--bg-inset);
+  border: 1px solid var(--border);
+  color: var(--text-muted);
+  border-radius: var(--r-sm);
+  padding: 5px 12px;
+  font-size: var(--text-sm);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+.modal-critical-btn--on {
+  background: color-mix(in srgb, var(--state-down) 12%, var(--bg-inset));
+  border-color: var(--state-down);
+  color: var(--state-down);
+  font-weight: 600;
+}
 .modal-actions {
   display: flex;
   justify-content: flex-end;
@@ -635,25 +857,13 @@ body {
   width: 100%;
 }
 
-.providers-form button {
-  align-self: flex-start;
-  background: var(--brand);
-  border: none;
-  color: var(--brand-ink);
-  border-radius: var(--r-sm);
-  padding: 7px 12px;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-}
-.providers-form button:hover {
-  background: var(--brand-press);
-}
-
 .update-section {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+  margin-top: 4px;
 }
 
 /* ---------- Update UI ---------- */
@@ -674,8 +884,8 @@ body {
   border: none;
   color: var(--brand-ink);
   border-radius: var(--r-sm);
-  padding: 5px 10px;
-  font-size: 12px;
+  padding: 3px 10px;
+  font-size: 10px;
   font-weight: 700;
   cursor: pointer;
 }
@@ -706,9 +916,10 @@ body {
   border: 1px solid var(--border);
   color: var(--muted);
   border-radius: var(--r-sm);
-  padding: 5px 10px;
-  font-size: 12px;
+  padding: 7px 10px;
+  font-size: 13px;
   cursor: pointer;
+  width: 100%;
 }
 .update-check-btn:hover:not(:disabled) {
   color: var(--text);

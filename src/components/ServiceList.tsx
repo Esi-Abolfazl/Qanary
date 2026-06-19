@@ -15,7 +15,7 @@ export function ServiceList({
   list: ListStatus;
   onRemoveService: (listId: string, serviceId: string) => Promise<unknown>;
   onRemoveList: (listId: string) => Promise<unknown>;
-  onEditList: (listId: string, name: string, icon: string) => void;
+  onEditList: (listId: string, name: string, icon: string, critical: boolean) => void;
   onAddService: (listId: string, listName: string) => void;
   onEditService: (listId: string, serviceId: string) => void;
 }) {
@@ -49,7 +49,7 @@ export function ServiceList({
 
   function handleEdit() {
     setMenuOpen(false);
-    onEditList(list.id, list.name, list.icon);
+    onEditList(list.id, list.name, list.icon, list.critical);
   }
 
   function handleToggleCollapse() {
@@ -78,7 +78,7 @@ export function ServiceList({
             onClick={() => setMenuOpen((o) => !o)}
             title="List options"
           >
-            <Icon name="more" />
+            <Icon name="ellipsisHorizontal" />
           </button>
           {menuOpen && (
             <div className="list-dropdown">

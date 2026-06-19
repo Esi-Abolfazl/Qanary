@@ -71,10 +71,12 @@ async fn probe_endpoint(
     (classify(tcp_ok, http_ok), latency_ms)
 }
 
-/// Any list fully down → Red; else Green.
+/// Critical list fully down → Red; non-critical list fully down → Yellow; else Green.
 pub fn overall_severity(lists: &[ListStatus]) -> Severity {
-    if lists.iter().any(|l| l.all_down) {
+    if lists.iter().any(|l| l.all_down && l.critical) {
         Severity::Red
+    } else if lists.iter().any(|l| l.all_down) {
+        Severity::Yellow
     } else {
         Severity::Green
     }
@@ -117,6 +119,7 @@ pub fn checking_lists(config: &Config) -> Vec<ListStatus> {
                 all_down: false,
                 services,
                 collapsed: list.collapsed,
+                critical: list.critical,
             }
         })
         .collect()
@@ -141,6 +144,7 @@ pub async fn probe_all(config: &Config, client: &reqwest::Client) -> Vec<ListSta
             services: statuses,
             all_down,
             collapsed: list.collapsed,
+            critical: list.critical,
         });
     }
     result
@@ -239,6 +243,10 @@ mod tests {
     }
 
     fn list_status(svc_states: &[&[ServiceState]]) -> ListStatus {
+        list_status_ex(svc_states, false)
+    }
+
+    fn list_status_ex(svc_states: &[&[ServiceState]], critical: bool) -> ListStatus {
         let services: Vec<_> = svc_states.iter().map(|s| svc_status(s)).collect();
         let all_down = !services.is_empty() && services.iter().all(|s| s.fully_failing());
         ListStatus {
@@ -248,6 +256,7 @@ mod tests {
             all_down,
             services,
             collapsed: false,
+            critical,
         }
     }
 
@@ -301,6 +310,7 @@ mod tests {
                 name: "Test".into(),
                 icon: "".into(),
                 collapsed: false,
+                critical: false,
                 services: vec![svc_a, svc_b],
             }],
             probe_interval_secs: 30,
@@ -315,9 +325,13 @@ mod tests {
     }
 
     #[test]
-    fn severity_any_list_down_is_red() {
+    fn severity_critical_down_is_red() {
         use ServiceState::*;
-        assert_eq!(overall_severity(&[list_status(&[&[Down, Down]]), list_status(&[&[Up]])]), Severity::Red);
+        // Critical list fully down → Red
+        assert_eq!(overall_severity(&[list_status_ex(&[&[Down, Down]], true), list_status(&[&[Up]])]), Severity::Red);
+        // Non-critical list fully down → Yellow
+        assert_eq!(overall_severity(&[list_status(&[&[Down, Down]]), list_status(&[&[Up]])]), Severity::Yellow);
+        // All up → Green
         assert_eq!(overall_severity(&[list_status(&[&[Up]]), list_status(&[&[Up]])]), Severity::Green);
     }
 }

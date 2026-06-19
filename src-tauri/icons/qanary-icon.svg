@@ -1,0 +1,23 @@
+<svg viewBox="0 0 1024 1024" xmlns="http://www.w3.org/2000/svg">
+  <!-- Dark rounded background -->
+  <rect width="1024" height="1024" rx="230" fill="#1a1a17"/>
+  <!-- Canary: original viewBox 0 0 120 116, content spans x:6-118 y:11-98
+       Scale ~6.4 to fill ~70% of icon, centered -->
+  <g transform="translate(115, 160) scale(6.8)">
+    <!-- tail -->
+    <path d="M40,66 L6,52 L20,82 Z" fill="#ffcc00"/>
+    <!-- crest -->
+    <path d="M66,30 Q70,12 79,16 Q74,24 80,28 Z" fill="#ffcc00"/>
+    <path d="M78,26 Q86,11 94,18 Q86,24 90,30 Z" fill="#ffcc00"/>
+    <!-- body + head -->
+    <ellipse cx="54" cy="70" rx="31" ry="28" fill="#ffcc00"/>
+    <circle cx="83" cy="43" r="20" fill="#ffcc00"/>
+    <!-- wing highlight -->
+    <path d="M48,58 C66,57 78,70 77,90 C63,95 44,87 40,70 Z" fill="#ffffff" opacity="0.13"/>
+    <!-- beak -->
+    <path d="M100,39 L118,44 L100,50 Z" fill="#f2792b"/>
+    <!-- eye -->
+    <circle cx="86" cy="41" r="6.4" fill="#15140f"/>
+    <circle cx="86" cy="41" r="3.8" fill="#22c55e"/>
+  </g>
+</svg>

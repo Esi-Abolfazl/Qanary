@@ -1,5 +1,7 @@
-import { useEffect, useRef, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import type { Severity, Snapshot } from "../types";
+import type { UpdatePhase } from "../App";
+import { Canary } from "./Canary";
 import { Icon } from "./Icon";
 import { useTheme, type ThemeMode } from "../theme";
 
@@ -11,6 +13,13 @@ function severityCopy(
 ): { head: string; sub: string } {
   if (overall === "green")
     return { head: "All clear", sub: "Everything’s reachable." };
+  if (overall === "yellow")
+    return {
+      head: "Heads up",
+      sub: failingList
+        ? `${failingList} is fully unreachable.`
+        : "A list is fully unreachable.",
+    };
   return {
     head: "Something’s wrong",
     sub: failingList
@@ -30,13 +39,40 @@ const THEME_LABEL: Record<ThemeMode, string> = {
   system: "System",
 };
 
-/** The canary "egg": a rounded pill holding the Severity dot. Heartbeat-pulses
- *  on alarm. The one primitive that will shrink to the widget/tray later. */
-function BrandMark({ severity, pulse }: { severity: Severity; pulse: boolean }) {
+/** The canary "egg" — status badge + refresh button in one.
+ *  During busy: double ping rings + core breathes; hover shows refresh icon.
+ *  On alarm (not busy): core heartbeats. */
+function StatusButton({
+  severity,
+  busy,
+  onClick,
+}: {
+  severity: Severity;
+  busy: boolean;
+  onClick: () => void;
+}) {
+  const coreClass = `status-btn-dot${busy ? " qbreathe" : severity === "red" ? " qhb" : ""}`;
   return (
-    <span className={`brandmark brandmark-${severity}`}>
-      <span className={`brandmark-dot${pulse ? " brandmark-pulse" : ""}`} />
-    </span>
+    <button
+      className={`status-btn status-btn-${severity}`}
+      onClick={onClick}
+      disabled={busy}
+      title="Refresh now"
+      aria-label="Refresh"
+    >
+      <span className="status-btn-inner">
+        {busy && (
+          <>
+            <span className="status-btn-ping" />
+            <span className="status-btn-ping" />
+          </>
+        )}
+        <span className={coreClass} />
+      </span>
+      <span className="status-btn-hover-icon" aria-hidden="true">
+        <Icon name="refresh" size={16} />
+      </span>
+    </button>
   );
 }
 
@@ -46,17 +82,24 @@ export function StatusHero({
   onAddList,
   onOpenSettings,
   onResetConfig,
+  updatePhase,
+  downloadProgress,
+  onDownload,
+  onInstall,
 }: {
   snapshot: Snapshot | null;
   onRefresh: () => Promise<void>;
   onAddList: () => void;
   onOpenSettings: () => void;
   onResetConfig: () => void;
+  updatePhase: UpdatePhase | null;
+  downloadProgress: number;
+  onDownload: () => void;
+  onInstall: () => void;
 }) {
   const overall: Severity = snapshot?.overall ?? "green";
   const wan = snapshot?.wan ?? null;
-  const failingList =
-    snapshot?.lists.find((l) => l.all_down)?.name ?? null;
+  const failingList = snapshot?.lists.find((l) => l.all_down)?.name ?? null;
   const copy = severityCopy(overall, failingList);
 
   const [menuOpen, setMenuOpen] = useState(false);
@@ -159,36 +202,55 @@ export function StatusHero({
           )}
         </div>
 
-        <button
-          className="icon-btn"
-          onClick={onRefresh}
-          disabled={busy}
-          title="Refresh now"
-        >
-          <Icon name="refresh" className={busy ? "spin" : ""} />
-        </button>
+        <StatusButton severity={overall} busy={busy} onClick={onRefresh} />
       </div>
 
       <div className="hero-center">
-        <BrandMark severity={overall} pulse={overall === "red" || busy} />
+        <span className="logo-mark">
+          <Canary size={50} />
+        </span>
         <div className="hero-copy">
           <div className="hero-headline">{copy.head}</div>
           <div className="hero-sub">{copy.sub}</div>
         </div>
       </div>
 
-      <div
-        className="wan"
-        title={wan ? `${wan.country_name} (${wan.country_code})` : "WAN unknown"}
-      >
-        {wan ? (
-          <>
-            <span className="flag">{wan.flag_emoji || "🏳️"}</span>
-            <span className="wan-cc">{wan.country_code || "??"}</span>
-            <span className="wan-ip">{wan.ip}</span>
-          </>
-        ) : (
-          <span className="wan-ip">—</span>
+      <div className="hero-footer">
+        <div
+          className="wan"
+          title={
+            wan ? `${wan.country_name} (${wan.country_code})` : "WAN unknown"
+          }
+        >
+          {wan ? (
+            <>
+              <span className="flag">{wan.flag_emoji || "🏳️"}</span>
+              <span className="wan-cc">{wan.country_code || "??"}</span>
+              <span className="wan-ip">{wan.ip}</span>
+            </>
+          ) : (
+            <span className="wan-ip">—</span>
+          )}
+        </div>
+
+        {updatePhase === "available" && (
+          <button className="update-btn" onClick={onDownload}>
+            Update
+          </button>
+        )}
+        {updatePhase === "downloading" && (
+          <button
+            className="update-btn update-btn-progress"
+            disabled
+            style={{ "--pct": `${downloadProgress}%` } as React.CSSProperties}
+          >
+            Downloading…
+          </button>
+        )}
+        {updatePhase === "ready" && (
+          <button className="update-btn update-btn-ready" onClick={onInstall}>
+            Restart
+          </button>
         )}
       </div>
     </header>

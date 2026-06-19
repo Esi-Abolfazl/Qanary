@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import type { Config } from "../types";
 import { parseHost } from "../utils/parseHost";
-import { checkForUpdate, downloadAndInstall, type UpdateInfo } from "../update";
+import { checkForUpdate, downloadUpdate, installAndRelaunch, type UpdateInfo } from "../update";
 
 type UpdateState =
   | "idle"
@@ -75,7 +75,8 @@ export function Settings({
   async function handleInstall() {
     setUpdateState("installing");
     try {
-      await downloadAndInstall();
+      await downloadUpdate(() => {});
+      await installAndRelaunch();
     } catch {
       setUpdateState("error");
     }

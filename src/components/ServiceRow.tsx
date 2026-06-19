@@ -21,6 +21,7 @@ export function ServiceRow({
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [menuUp, setMenuUp] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -70,7 +71,7 @@ export function ServiceRow({
       />
       <img
         className="row-favicon"
-        src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(faviconHost)}&sz=32`}
+        src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(faviconHost)}&sz=64`}
         alt=""
         loading="lazy"
         onError={(e) => {
@@ -126,13 +127,23 @@ export function ServiceRow({
       <div className="list-menu-wrap" ref={menuRef}>
         <button
           className="list-menu-btn"
-          onClick={() => setMenuOpen((o) => !o)}
+          onClick={(e) => {
+            if (menuOpen) { setMenuOpen(false); return; }
+            const btn = e.currentTarget;
+            const sec = btn.closest("section");
+            const scroller = sec?.parentElement;
+            const limit = scroller
+              ? scroller.getBoundingClientRect().bottom
+              : window.innerHeight;
+            setMenuUp(btn.getBoundingClientRect().bottom + 88 > limit);
+            setMenuOpen(true);
+          }}
           title="Service options"
         >
-          <Icon name="more" />
+          <Icon name="ellipsisVertical" />
         </button>
         {menuOpen && (
-          <div className="list-dropdown">
+          <div className={`list-dropdown${menuUp ? " list-dropdown-up" : ""}`}>
             <button
               className="list-dropdown-item"
               onClick={() => {

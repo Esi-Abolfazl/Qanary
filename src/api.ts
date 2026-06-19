@@ -26,11 +26,11 @@ export const updateService = (
 export const removeService = (listId: string, serviceId: string) =>
   invoke<Config>("remove_service", { listId, serviceId });
 
-export const addList = (name: string, icon: string) =>
-  invoke<Config>("add_list", { name, icon });
+export const addList = (name: string, icon: string, critical: boolean) =>
+  invoke<Config>("add_list", { name, icon, critical });
 
-export const updateList = (listId: string, name: string, icon: string) =>
-  invoke<Config>("update_list", { listId, name, icon });
+export const updateList = (listId: string, name: string, icon: string, critical: boolean) =>
+  invoke<Config>("update_list", { listId, name, icon, critical });
 
 export const removeList = (listId: string) => invoke<Config>("remove_list", { listId });
 

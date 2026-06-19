@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 116" width="120" height="116" role="img" aria-label="Qanary">
+  <path d="M40,66 L6,52 L20,82 Z" fill="#ffcc00"/>
+  <path d="M66,30 Q70,12 79,16 Q74,24 80,28 Z" fill="#ffcc00"/>
+  <path d="M78,26 Q86,11 94,18 Q86,24 90,30 Z" fill="#ffcc00"/>
+  <ellipse cx="54" cy="70" rx="31" ry="28" fill="#ffcc00"/>
+  <circle cx="83" cy="43" r="20" fill="#ffcc00"/>
+  <path d="M48,58 C66,57 78,70 77,90 C63,95 44,87 40,70 Z" fill="#000" opacity="0.12"/>
+  <path d="M100,39 L118,44 L100,50 Z" fill="#f2792b"/>
+  <circle cx="86" cy="41" r="6.4" fill="#15140f"/>
+  <circle cx="86" cy="41" r="3.8" fill="#1fb872"/>
+</svg>

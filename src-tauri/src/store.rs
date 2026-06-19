@@ -69,9 +69,9 @@ mod tests {
         assert_eq!(loaded.lists.len(), original.lists.len());
         assert_eq!(loaded.probe_interval_secs, original.probe_interval_secs);
         assert_eq!(loaded.lists[0].services.len(), original.lists[0].services.len());
-        // Each service must have exactly 1 endpoint (single-host seed).
+        // Every service must survive round-trip with at least one endpoint.
         for svc in &loaded.lists[0].services {
-            assert_eq!(svc.endpoints.len(), 1);
+            assert!(!svc.endpoints.is_empty());
         }
         assert_eq!(loaded.ip_providers.len(), original.ip_providers.len());
 

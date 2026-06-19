@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img" aria-label="Qanary app icon (light)">
+  <rect x="0" y="0" width="1024" height="1024" rx="230" fill="#fbfaf6"/>
+  <rect x="1" y="1" width="1022" height="1022" rx="229" fill="none" stroke="#ece8df" stroke-width="2"/>
+  <g transform="translate(200,214) scale(5.2)">
+    <path d="M40,66 L6,52 L20,82 Z" fill="#1a1a17"/>
+    <path d="M66,30 Q70,12 79,16 Q74,24 80,28 Z" fill="#1a1a17"/>
+    <path d="M78,26 Q86,11 94,18 Q86,24 90,30 Z" fill="#1a1a17"/>
+    <ellipse cx="54" cy="70" rx="31" ry="28" fill="#1a1a17"/>
+    <circle cx="83" cy="43" r="20" fill="#1a1a17"/>
+    <path d="M48,58 C66,57 78,70 77,90 C63,95 44,87 40,70 Z" fill="#fff" opacity="0.10"/>
+    <path d="M100,39 L118,44 L100,50 Z" fill="#f2792b"/>
+    <circle cx="86" cy="41" r="6.4" fill="#fbfaf6"/>
+    <circle cx="86" cy="41" r="3.8" fill="#1fb872"/>
+  </g>
+</svg>

@@ -1,0 +1,37 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="520" height="200" viewBox="0 0 520 200">
+  <defs>
+    <radialGradient id="bg-grad" cx="50%" cy="0%" r="125%" fx="50%" fy="0%">
+      <stop offset="0%" stop-color="#26241c"/>
+      <stop offset="70%" stop-color="#15140f"/>
+    </radialGradient>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@700&amp;display=swap');
+      .wordmark-text { font-family: Inter, system-ui, sans-serif; font-weight: 700; font-size: 46px; letter-spacing: -0.02em; line-height: 1; }
+      .tagline-text  { font-family: Inter, system-ui, sans-serif; font-size: 14px; letter-spacing: 0.01em; fill: #8a857a; }
+    </style>
+  </defs>
+
+  <!-- Icon badge -->
+  <rect x="0" y="54" width="92" height="92" rx="22" ry="22" fill="url(#bg-grad)"/>
+
+  <!-- Logo mark -->
+  <g transform="translate(14, 61)">
+    <path d="M40,66 L6,52 L20,82 Z" fill="#ffcc00"/>
+    <path d="M66,30 Q70,12 79,16 Q74,24 80,28 Z" fill="#ffcc00"/>
+    <path d="M78,26 Q86,11 94,18 Q86,24 90,30 Z" fill="#ffcc00"/>
+    <ellipse cx="54" cy="70" rx="31" ry="28" fill="#ffcc00"/>
+    <circle cx="83" cy="43" r="20" fill="#ffcc00"/>
+    <path d="M48,58 C66,57 78,70 77,90 C63,95 44,87 40,70 Z" fill="#000" opacity="0.12"/>
+    <path d="M100,39 L118,44 L100,50 Z" fill="#f2792b"/>
+    <circle cx="86" cy="41" r="6.4" fill="#15140f"/>
+    <circle cx="86" cy="41" r="3.8" fill="#1fb872"/>
+  </g>
+
+  <!-- Wordmark text -->
+  <text x="132" y="116" class="wordmark-text">
+    <tspan fill="#e0a300">Q</tspan><tspan fill="#1a1a1a">anary</tspan>
+  </text>
+
+  <!-- Tagline -->
+  <text x="133" y="140" class="tagline-text">Early warning for your connections</text>
+</svg>
