@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import "./App.css";
 import * as api from "./api";
 import type { Config, ServiceDraft, Snapshot } from "./types";
@@ -9,6 +9,12 @@ import { ListModal } from "./components/ListModal";
 import { ServiceModal } from "./components/ServiceModal";
 import { serviceToText } from "./utils/parseServices";
 import { checkForUpdate, downloadUpdate, installAndRelaunch } from "./update";
+import { criticalTransitions } from "./utils/transitions";
+import { fireAlert, type Dir } from "./utils/alerts";
+
+// Collect Transitions for this long before firing, so several lists dropping at
+// once produce a single batched notification instead of one each.
+const ALERT_WINDOW_MS = 2500;
 
 type ModalState =
   | null
@@ -32,12 +38,61 @@ function App() {
   const [modal, setModal] = useState<ModalState>(null);
   const [updatePhase, setUpdatePhase] = useState<UpdatePhase | null>(null);
   const [downloadProgress, setDownloadProgress] = useState(0);
+  // Holds the previous snapshot so we can diff for Transitions on each update.
+  const prevSnapshotRef = useRef<Snapshot | null>(null);
+
+  // Keep a ref to the latest config so the status-update callback reads fresh flags
+  // without needing to re-subscribe whenever config changes.
+  const configRef = useRef<Config | null>(null);
+  useEffect(() => {
+    configRef.current = config;
+  }, [config]);
+
+  // Batching: pending Transitions keyed by list id (latest edge wins), plus the
+  // open window timer. Flushed once per ALERT_WINDOW_MS into per-direction alerts.
+  const pendingRef = useRef<Map<string, { name: string; dir: Dir }>>(new Map());
+  const timerRef = useRef<number | null>(null);
+
+  function flushAlerts() {
+    timerRef.current = null;
+    const pending = pendingRef.current;
+    pendingRef.current = new Map();
+
+    // "all" = every critical list is now in that direction (full outage / full recovery).
+    const crit = (prevSnapshotRef.current?.lists ?? []).filter((l) => l.critical);
+    const allDown = crit.length > 0 && crit.every((l) => l.all_down);
+    const allUp = crit.length > 0 && crit.every((l) => !l.all_down);
+
+    const downNames: string[] = [];
+    const upNames: string[] = [];
+    for (const { name, dir } of pending.values()) {
+      (dir === "down" ? downNames : upNames).push(name);
+    }
+    fireAlert("down", downNames, allDown, configRef.current);
+    fireAlert("up", upNames, allUp, configRef.current);
+  }
+
+  function handleSnapshot(s: Snapshot) {
+    const prev = prevSnapshotRef.current;
+    if (prev !== null) {
+      const transitions = criticalTransitions(prev.lists, s.lists);
+      for (const t of transitions) {
+        pendingRef.current.set(t.id, { name: t.name, dir: t.dir });
+      }
+      // Open one window from the first Transition; later ones join the same batch.
+      if (transitions.length > 0 && timerRef.current === null) {
+        timerRef.current = window.setTimeout(flushAlerts, ALERT_WINDOW_MS);
+      }
+    }
+    prevSnapshotRef.current = s;
+    setSnapshot(s);
+  }
 
   useEffect(() => {
-    api.getSnapshot().then((s) => s && setSnapshot(s));
+    api.getSnapshot().then((s) => s && handleSnapshot(s));
     api.getConfig().then(setConfig);
     let unlisten: (() => void) | undefined;
-    api.onStatusUpdate(setSnapshot).then((fn) => {
+    api.onStatusUpdate(handleSnapshot).then((fn) => {
       unlisten = fn;
     });
     checkForUpdate()
@@ -45,7 +100,10 @@ function App() {
         if (info) setUpdatePhase("available");
       })
       .catch(() => {});
-    return () => unlisten?.();
+    return () => {
+      unlisten?.();
+      if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    };
   }, []);
 
   async function handleDownload() {
@@ -174,8 +232,18 @@ function App() {
         config={config}
         open={modal?.kind === "settings"}
         onClose={() => setModal(null)}
-        onSave={(providers) =>
-          api.updateSettings(undefined, undefined, providers).then(setConfig)
+        onSave={(providers, downNotify, downSound, upNotify, upSound) =>
+          api
+            .updateSettings(
+              undefined,
+              undefined,
+              providers,
+              downNotify,
+              downSound,
+              upNotify,
+              upSound,
+            )
+            .then(setConfig)
         }
       />
     </main>

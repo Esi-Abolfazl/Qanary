@@ -58,6 +58,9 @@ fn default_port() -> u16 {
 fn default_true() -> bool {
     true
 }
+fn default_false() -> bool {
+    false
+}
 
 impl Service {
     /// New HTTPS service (port 443, enabled) with a single endpoint and a fresh id.
@@ -126,6 +129,19 @@ pub struct Config {
     /// Ordered list of HTTPS plain-text IP providers tried in sequence.
     #[serde(default = "default_ip_providers")]
     pub ip_providers: Vec<String>,
+    // Alert settings — separate per direction (down = outage, up = recovery).
+    /// Native notification on a critical-list outage. Default on.
+    #[serde(default = "default_true")]
+    pub down_notify: bool,
+    /// Sound on a critical-list outage. Default on.
+    #[serde(default = "default_true")]
+    pub down_sound: bool,
+    /// Native notification on a critical-list recovery. Default off.
+    #[serde(default = "default_false")]
+    pub up_notify: bool,
+    /// Sound on a critical-list recovery. Default on.
+    #[serde(default = "default_true")]
+    pub up_sound: bool,
 }
 
 fn default_interval() -> u64 {
@@ -197,6 +213,10 @@ impl Default for Config {
             probe_interval_secs: default_interval(),
             timeout_ms: default_timeout(),
             ip_providers: default_ip_providers(),
+            down_notify: true,
+            down_sound: true,
+            up_notify: false,
+            up_sound: true,
         }
     }
 }

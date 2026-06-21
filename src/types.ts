@@ -73,6 +73,10 @@ export interface Config {
   probe_interval_secs: number;
   timeout_ms: number;
   ip_providers: string[];
+  down_notify: boolean;
+  down_sound: boolean;
+  up_notify: boolean;
+  up_sound: boolean;
 }
 
 // ----- Input types for add/edit commands -----

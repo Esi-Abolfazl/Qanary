@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getVersion } from "@tauri-apps/api/app";
 import type { Config } from "../types";
 import { parseHost } from "../utils/parseHost";
 import { checkForUpdate, downloadUpdate, installAndRelaunch, type UpdateInfo } from "../update";
@@ -25,7 +26,13 @@ export function Settings({
   config: Config | null;
   open: boolean;
   onClose: () => void;
-  onSave: (providers: string[]) => void;
+  onSave: (
+    providers: string[],
+    downNotify: boolean,
+    downSound: boolean,
+    upNotify: boolean,
+    upSound: boolean,
+  ) => void;
 }) {
   const [slots, setSlots] = useState<[string, string, string, string]>([
     "",
@@ -33,13 +40,26 @@ export function Settings({
     "",
     "",
   ]);
+  const [downNotify, setDownNotify] = useState(true);
+  const [downSound, setDownSound] = useState(true);
+  const [upNotify, setUpNotify] = useState(false);
+  const [upSound, setUpSound] = useState(true);
   const [seeded, setSeeded] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateState, setUpdateState] = useState<UpdateState>("idle");
+  const [version, setVersion] = useState("");
+
+  useEffect(() => {
+    getVersion().then(setVersion).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (config && !seeded) {
       setSlots(toSlots(config.ip_providers));
+      setDownNotify(config.down_notify);
+      setDownSound(config.down_sound);
+      setUpNotify(config.up_notify);
+      setUpSound(config.up_sound);
       setSeeded(true);
     }
   }, [config, seeded]);
@@ -55,7 +75,7 @@ export function Settings({
   function handleSave(e: React.FormEvent) {
     e.preventDefault();
     const providers = slots.map(parseHost).filter(Boolean);
-    onSave(providers);
+    onSave(providers, downNotify, downSound, upNotify, upSound);
     onClose();
   }
 
@@ -93,20 +113,56 @@ export function Settings({
         <h3 className="modal-title">Settings</h3>
 
         <form className="providers-form" onSubmit={handleSave}>
-          <p className="settings-label">IP providers (tried in order):</p>
-          {slots.map((p, i) => (
-            <input
-              key={i}
-              className="provider-input"
-              placeholder={
-                ["ip.shecan.ir", "ifconfig.me/ip", "api.ipify.org", "ipify.ir"][
-                  i
-                ]
-              }
-              value={p}
-              onChange={(e) => setSlot(i, e.target.value)}
-            />
-          ))}
+          <fieldset className="settings-card">
+            <legend className="settings-card-title">IP providers (tried in order)</legend>
+            {slots.map((p, i) => (
+              <input
+                key={i}
+                className="provider-input"
+                placeholder={
+                  ["ip.shecan.ir", "ifconfig.me/ip", "api.ipify.org", "ipify.ir"][
+                    i
+                  ]
+                }
+                value={p}
+                onChange={(e) => setSlot(i, e.target.value)}
+              />
+            ))}
+          </fieldset>
+
+          <fieldset className="settings-card">
+            <legend className="settings-card-title">Critical-list alerts</legend>
+            <div className="alert-grid">
+              <span className="alert-grid-head" />
+              <span className="alert-grid-head">Notify</span>
+              <span className="alert-grid-head">Sound</span>
+
+              <span className="alert-grid-row-label">Outage (down)</span>
+              <input
+                type="checkbox"
+                checked={downNotify}
+                onChange={(e) => setDownNotify(e.target.checked)}
+              />
+              <input
+                type="checkbox"
+                checked={downSound}
+                onChange={(e) => setDownSound(e.target.checked)}
+              />
+
+              <span className="alert-grid-row-label">Recovery (up)</span>
+              <input
+                type="checkbox"
+                checked={upNotify}
+                onChange={(e) => setUpNotify(e.target.checked)}
+              />
+              <input
+                type="checkbox"
+                checked={upSound}
+                onChange={(e) => setUpSound(e.target.checked)}
+              />
+            </div>
+          </fieldset>
+
           <div className="modal-actions">
             <button type="button" className="modal-cancel" onClick={onClose}>
               Cancel
@@ -126,24 +182,31 @@ export function Settings({
               </button>
             </div>
           )}
-          {updateState === "installing" && (
-            <span className="update-msg">Installing…</span>
-          )}
-          {updateState === "up-to-date" && (
-            <span className="update-msg">Already up to date.</span>
-          )}
-          {updateState === "error" && (
-            <span className="update-msg update-err">Update check failed.</span>
-          )}
-          <button
-            className="update-check-btn"
-            onClick={handleCheckUpdate}
-            disabled={
-              updateState === "checking" || updateState === "installing"
-            }
-          >
-            {updateState === "checking" ? "Checking…" : "Check for updates"}
-          </button>
+          <div className="update-row">
+            <span className="app-version">
+              Qanary{version && ` v${version}`}
+            </span>
+            <div className="update-row-right">
+              {updateState === "installing" && (
+                <span className="update-msg">Installing…</span>
+              )}
+              {updateState === "up-to-date" && (
+                <span className="update-msg">Up to date</span>
+              )}
+              {updateState === "error" && (
+                <span className="update-msg update-err">Check failed</span>
+              )}
+              <button
+                className="update-check-btn"
+                onClick={handleCheckUpdate}
+                disabled={
+                  updateState === "checking" || updateState === "installing"
+                }
+              >
+                {updateState === "checking" ? "Checking…" : "Check for updates"}
+              </button>
+            </div>
+          </div>
         </div>
       </div>
     </div>

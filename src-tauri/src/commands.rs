@@ -144,6 +144,10 @@ pub fn update_settings(
     probe_interval_secs: Option<u64>,
     timeout_ms: Option<u64>,
     ip_providers: Option<Vec<String>>,
+    down_notify: Option<bool>,
+    down_sound: Option<bool>,
+    up_notify: Option<bool>,
+    up_sound: Option<bool>,
 ) -> Config {
     mutate(&app, |cfg| {
         if let Some(v) = probe_interval_secs {
@@ -161,6 +165,18 @@ pub fn update_settings(
             if !providers.is_empty() {
                 cfg.ip_providers = providers;
             }
+        }
+        if let Some(v) = down_notify {
+            cfg.down_notify = v;
+        }
+        if let Some(v) = down_sound {
+            cfg.down_sound = v;
+        }
+        if let Some(v) = up_notify {
+            cfg.up_notify = v;
+        }
+        if let Some(v) = up_sound {
+            cfg.up_sound = v;
         }
     })
 }

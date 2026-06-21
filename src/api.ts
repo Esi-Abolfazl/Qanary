@@ -39,11 +39,23 @@ export const resetConfig = () => invoke<Config>("reset_config");
 export const setListCollapsed = (listId: string, collapsed: boolean) =>
   invoke<void>("set_list_collapsed", { listId, collapsed });
 
-export const updateSettings = (probeIntervalSecs?: number, timeoutMs?: number, ipProviders?: string[]) =>
+export const updateSettings = (
+  probeIntervalSecs?: number,
+  timeoutMs?: number,
+  ipProviders?: string[],
+  downNotify?: boolean,
+  downSound?: boolean,
+  upNotify?: boolean,
+  upSound?: boolean,
+) =>
   invoke<Config>("update_settings", {
     probeIntervalSecs: probeIntervalSecs ?? null,
     timeoutMs: timeoutMs ?? null,
     ipProviders: ipProviders ?? null,
+    downNotify: downNotify ?? null,
+    downSound: downSound ?? null,
+    upNotify: upNotify ?? null,
+    upSound: upSound ?? null,
   });
 
 /** Subscribe to live snapshot pushes. Returns a promise of the unlisten fn. */

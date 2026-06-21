@@ -36,3 +36,9 @@ _Avoid_: group, category
 The overall app-level traffic light: `green` / `red` (binary). Red when any List is
 all_down. Distinct from per-Service health.
 _Avoid_: status, health
+
+**Transition**:
+A change in a **critical** List's `all_down` between two consecutive snapshots:
+`false→true` is an **outage**, `true→false` is a **recovery**. The only events that fire
+a notification + sound. Non-critical Lists and per-Service flips do not transition.
+_Avoid_: change, flip, event (when you mean this specific critical-List crossing)

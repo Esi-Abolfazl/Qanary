@@ -316,6 +316,10 @@ mod tests {
             probe_interval_secs: 30,
             timeout_ms: 3000,
             ip_providers: vec![],
+            down_notify: true,
+            down_sound: true,
+            up_notify: false,
+            up_sound: true,
         };
         let lists = checking_lists(&config);
         assert_eq!(lists.len(), 1);
