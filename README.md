@@ -12,16 +12,22 @@ Desktop connectivity monitor. Traffic-light status for whether your machine can 
 | 🟡 Yellow | A non-critical list is fully unreachable |
 | 🔴 Red    | A critical list is fully unreachable     |
 
-Seeded defaults: **Iran** list is critical (red alarm), **Global** list is non-critical (yellow warn). Both are fully configurable.
+Seeded defaults: **Global** list is critical (red alarm), **Iran** list is non-critical (yellow warn). All lists are fully configurable — flip the **Critical** toggle on any of them.
 
 - Shows WAN IP + country flag.
 - Add your own services and lists. Config persisted as local JSON.
+- Lives in the **system tray** with a dynamic icon that mirrors current status (green / yellow / red).
+- Native **desktop notifications** on critical-list status transitions — fire when a critical list goes fully down and again on recovery (with optional sound).
 
 ## Lists
 
 Each list has a **Critical** toggle (in the add / edit modal). When on, that list going fully down raises a red alarm. When off, it only warns yellow.
 
 To edit a list: tap `⋯` next to the list name → **Edit**.
+
+## Notifications
+
+Qanary sends a native desktop notification when a **critical** list changes state — fully down (`up → down`) and again on recovery (`down → up`). Each can carry a sound. Only critical lists notify, so mark a list **Critical** to start receiving them. Toggle notifications and sound in **Settings**.
 
 ## Services
 

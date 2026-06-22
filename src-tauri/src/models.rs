@@ -163,7 +163,7 @@ fn default_ip_providers() -> Vec<String> {
 impl Default for Config {
     /// First-run seed.
     fn default() -> Self {
-        let global = ServiceList::new(
+        let mut global = ServiceList::new(
             "Global",
             "🌍",
             vec![
@@ -197,7 +197,7 @@ impl Default for Config {
                 ),
             ],
         );
-        let mut iran = ServiceList::new(
+        let iran = ServiceList::new(
             "Iran",
             "🇮🇷",
             vec![
@@ -207,7 +207,7 @@ impl Default for Config {
                 Service::new("Snapp", "snapp.ir"),
             ],
         );
-        iran.critical = true;
+        global.critical = true;
         Config {
             lists: vec![global, iran],
             probe_interval_secs: default_interval(),

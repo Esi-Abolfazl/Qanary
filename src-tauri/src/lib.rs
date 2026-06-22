@@ -9,6 +9,7 @@ mod models;
 mod probe;
 mod state;
 mod store;
+mod tray;
 mod wan;
 
 use models::{Snapshot};
@@ -53,6 +54,8 @@ pub async fn run_cycle(app: &tauri::AppHandle, refresh_wan: bool) -> Snapshot {
 
     *state.snapshot.lock().unwrap() = Some(snapshot.clone());
     let _ = app.emit(EVENT_STATUS, &snapshot);
+    // ponytail: set every cycle; no last-severity diffing — rebuild cost is negligible.
+    tray::update_icon(app, overall);
     snapshot
 }
 
@@ -69,6 +72,8 @@ pub fn emit_checking(app: &tauri::AppHandle) {
     };
     *state.snapshot.lock().unwrap() = Some(snapshot.clone());
     let _ = app.emit(EVENT_STATUS, &snapshot);
+    // Checking = busy: show the brand-yellow dot, matching the status button's qbreathe.
+    tray::update_checking(app);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -108,6 +113,9 @@ pub fn run() {
                 wan: Mutex::new(None),
             });
 
+            // Build the tray icon before emit_checking so update_icon finds the handle.
+            tray::build_tray(app.handle())?;
+
             // Emit a checking snapshot immediately so the UI shows lists on first paint
             // instead of the "Starting first probe…" placeholder.
             emit_checking(app.handle());
@@ -135,6 +143,14 @@ pub fn run() {
             });
 
             Ok(())
+        })
+        // Close-to-tray: intercept the close button and hide instead of quit.
+        // The probe loop keeps running. Quit remains available via the tray menu.
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                api.prevent_close();
+                let _ = window.hide();
+            }
         })
         .invoke_handler(tauri::generate_handler![
             commands::get_snapshot,
