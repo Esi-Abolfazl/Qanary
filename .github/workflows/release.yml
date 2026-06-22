@@ -13,8 +13,32 @@ jobs:
     outputs:
       release_id: ${{ steps.create.outputs.result }}
     steps:
+      - uses: actions/checkout@v6
+
+      # Pull the section for this tag out of CHANGELOG.md. The lines under the
+      # matching `## [x.y.z]` heading (until the next `## [` version heading) become
+      # the release body, which tauri-action writes into latest.json `notes` → the
+      # in-app changelog. Sub-headings like `## What's new` / `## Fix` are kept.
+      - name: Extract changelog notes
+        id: notes
+        run: |
+          VER="${GITHUB_REF_NAME#v}"
+          NOTES=$(awk -v ver="$VER" '
+            $0 ~ "^## \\[" ver "\\]" { grab=1; next }
+            grab && /^## \[/ { exit }
+            grab { print }
+          ' CHANGELOG.md | sed '/./,$!d')   # drop leading blank lines
+          if [ -z "$NOTES" ]; then NOTES="See the release notes for details."; fi
+          {
+            echo 'body<<CHANGELOG_EOF'
+            echo "$NOTES"
+            echo 'CHANGELOG_EOF'
+          } >> "$GITHUB_OUTPUT"
+
       - uses: actions/github-script@v9
         id: create
+        env:
+          RELEASE_BODY: ${{ steps.notes.outputs.body }}
         with:
           script: |
             const tag = process.env.GITHUB_REF_NAME
@@ -23,7 +47,7 @@ jobs:
               repo: context.repo.repo,
               tag_name: tag,
               name: `Qanary ${tag}`,
-              body: 'See the changelog for details.',
+              body: process.env.RELEASE_BODY || 'See the release notes for details.',
               draft: true,
               prerelease: false,
             })

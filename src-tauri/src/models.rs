@@ -142,6 +142,14 @@ pub struct Config {
     /// Sound on a critical-list recovery. Default on.
     #[serde(default = "default_true")]
     pub up_sound: bool,
+    /// Hide the Dock icon — run as a tray/menu-bar-only app. macOS only; default off.
+    #[serde(default)]
+    pub hide_dock: bool,
+    /// Last app version we showed the "What's new" changelog for. On startup, if the
+    /// running version differs, we show that version's CHANGELOG section once and update
+    /// this. None = fresh install (we record the version but don't show notes).
+    #[serde(default)]
+    pub last_changelog_version: Option<String>,
 }
 
 fn default_interval() -> u64 {
@@ -217,6 +225,8 @@ impl Default for Config {
             down_sound: true,
             up_notify: false,
             up_sound: true,
+            hide_dock: false,
+            last_changelog_version: None,
         }
     }
 }

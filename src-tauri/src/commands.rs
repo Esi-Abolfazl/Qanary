@@ -6,8 +6,11 @@
 
 use crate::models::{Config, Endpoint, Service, ServiceList, Snapshot};
 use crate::state::AppState;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
+
+/// Release notes baked into the binary at build time — no resource bundling, no runtime IO.
+const CHANGELOG: &str = include_str!("../../CHANGELOG.md");
 
 /// Incoming endpoint spec from the frontend (host + optional port).
 #[derive(Debug, Deserialize)]
@@ -179,6 +182,100 @@ pub fn update_settings(
             cfg.up_sound = v;
         }
     })
+}
+
+/// Release notes for the modal: the CHANGELOG section plus the version it belongs to.
+#[derive(Serialize)]
+pub struct ChangelogPayload {
+    pub version: String,
+    pub body: String,
+}
+
+/// Called once on startup. If the running version differs from the last one we showed notes
+/// for, return that version's CHANGELOG section (and record it so it shows only once). Returns
+/// None when already shown for this version, or when the version has no CHANGELOG section.
+/// A missing `last_changelog_version` (fresh install or upgrade from a pre-mechanism build)
+/// counts as "changed", so the modal shows. Works for any update path (in-app or manual).
+#[tauri::command]
+pub fn take_new_changelog(app: AppHandle) -> Option<ChangelogPayload> {
+    let running = app.package_info().version.to_string();
+    let state = app.state::<AppState>();
+
+    let to_save = {
+        let mut cfg = state.config.lock().unwrap();
+        if cfg.last_changelog_version.as_deref() == Some(running.as_str()) {
+            return None; // already shown for this version
+        }
+        cfg.last_changelog_version = Some(running.clone());
+        cfg.clone()
+    };
+    if let Err(err) = crate::store::save(&state.config_path, &to_save) {
+        eprintln!("qanary: failed to save last_changelog_version: {err}");
+    }
+
+    changelog_section(CHANGELOG, &running).map(|body| ChangelogPayload { version: running, body })
+}
+
+/// Extract the notes under `## [version]` up to the next `## [` version heading, trimmed of
+/// surrounding blank lines. Mirrors the awk extractor in .github/workflows/release.yml so the
+/// in-app modal and the GitHub release body stay identical. None if the section is absent/empty.
+fn changelog_section(changelog: &str, version: &str) -> Option<String> {
+    let header = format!("## [{version}]");
+    let mut lines = changelog.lines();
+    lines.by_ref().find(|l| l.trim_end() == header)?;
+    let body: Vec<&str> = lines.take_while(|l| !l.starts_with("## [")).collect();
+    let body = body.join("\n").trim_matches('\n').to_string();
+    if body.trim().is_empty() {
+        None
+    } else {
+        Some(body)
+    }
+}
+
+#[cfg(test)]
+mod changelog_tests {
+    use super::changelog_section;
+
+    const SAMPLE: &str = "# Changelog\n\n## [0.4.5]\n\n## What's new\n- a\n- b\n\n## Fix\n- c\n\n## [0.4.0]\n- old\n";
+
+    #[test]
+    fn extracts_section_until_next_version_heading() {
+        let got = changelog_section(SAMPLE, "0.4.5").unwrap();
+        assert!(got.starts_with("## What's new"), "trims leading blank: {got:?}");
+        assert!(got.contains("## Fix") && got.contains("- c"), "keeps sub-headings");
+        assert!(!got.contains("0.4.0") && !got.contains("old"), "stops at next version");
+    }
+
+    #[test]
+    fn missing_version_is_none() {
+        assert!(changelog_section(SAMPLE, "9.9.9").is_none());
+    }
+}
+
+/// Toggle the macOS Dock icon. Persists the new value and applies it live.
+/// On non-macOS this is a no-op at the OS level but still persists the flag.
+#[tauri::command]
+pub fn set_hide_dock(app: AppHandle, enabled: bool) -> Config {
+    let state = app.state::<AppState>();
+    let updated = {
+        let mut cfg = state.config.lock().unwrap();
+        cfg.hide_dock = enabled;
+        cfg.clone()
+    };
+    if let Err(err) = crate::store::save(&state.config_path, &updated) {
+        eprintln!("qanary: failed to save hide_dock: {err}");
+    }
+    // Apply live on macOS — menu-bar-only (Accessory) vs normal app (Regular).
+    #[cfg(target_os = "macos")]
+    {
+        let policy = if enabled {
+            tauri::ActivationPolicy::Accessory
+        } else {
+            tauri::ActivationPolicy::Regular
+        };
+        let _ = app.set_activation_policy(policy);
+    }
+    updated
 }
 
 /// Persist the collapsed/expanded state of a list without triggering a network re-probe.

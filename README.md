@@ -6,22 +6,28 @@
 
 Desktop connectivity monitor. Traffic-light status for whether your machine can reach a list of services — useful on restricted or censored networks where some services are blocked and others aren't.
 
+<div align="center">
+  <img src="public/qanary-screenshot.jpg" alt="Qanary showing Global and Iran service lists, all reachable" width="380" />
+</div>
+
 | Severity  | When                                     |
 | --------- | ---------------------------------------- |
 | 🟢 Green  | Everything reachable                     |
-| 🟡 Yellow | A non-critical list is fully unreachable |
+| 🟠 Orange | A non-critical list is fully unreachable |
 | 🔴 Red    | A critical list is fully unreachable     |
 
-Seeded defaults: **Global** list is critical (red alarm), **Iran** list is non-critical (yellow warn). All lists are fully configurable — flip the **Critical** toggle on any of them.
+Seeded defaults: **Global** list is critical (red alarm), **Iran** list is non-critical (orange warn). All lists are fully configurable — flip the **Critical** toggle on any of them.
 
 - Shows WAN IP + country flag.
 - Add your own services and lists. Config persisted as local JSON.
-- Lives in the **system tray** with a dynamic icon that mirrors current status (green / yellow / red).
+- Lives in the **system tray** with a dynamic icon that mirrors current status (green / orange / red).
 - Native **desktop notifications** on critical-list status transitions — fire when a critical list goes fully down and again on recovery (with optional sound).
+- **Launch at login** and **Hide the Dock icon** (macOS) for menu-bar-only operation — both in **Settings**.
+- **Dark / light theme** following the system, with a manual override in the menu.
 
 ## Lists
 
-Each list has a **Critical** toggle (in the add / edit modal). When on, that list going fully down raises a red alarm. When off, it only warns yellow.
+Each list has a **Critical** toggle (in the add / edit modal). When on, that list going fully down raises a red alarm. When off, it only warns orange.
 
 To edit a list: tap `⋯` next to the list name → **Edit**.
 
@@ -71,21 +77,6 @@ Prebuilt apps are on the [Releases page](https://github.com/Esi-Abolfazl/Qanary/
 > xattr -cr /Applications/Qanary.app
 > ```
 
-## Cutting a release
-
-1. Bump the version in three places (all must match):
-   - `src-tauri/tauri.conf.json` → `"version"`
-   - `src-tauri/Cargo.toml` → `version`
-   - `package.json` → `"version"`
-2. Commit, tag, and push:
-   ```bash
-   git tag v0.2.0
-   git push origin v0.2.0
-   ```
-3. GitHub Actions builds both arches, signs the artifacts, and publishes the release automatically. The `latest.json` manifest is included so existing installs detect the update.
-
-> **Prerequisite:** secrets `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` must be set in the repo's GitHub settings. Generate the keypair once with `pnpm tauri signer generate -w ~/.tauri/qanary_updater.key` and paste the public key into `tauri.conf.json` → `plugins.updater.pubkey`.
-
 ## In-app updates
 
-Qanary checks for updates silently on every launch. A banner appears when a newer version is available — click **Install & restart** to update. You can also trigger a check from **Settings**.
+Qanary checks for updates silently on every launch. Update button appears when a newer version is available — You can also trigger a check from **Settings**. After it relaunches, a what's-new dialog shows the new version's release notes.

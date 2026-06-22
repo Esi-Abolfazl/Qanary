@@ -58,6 +58,17 @@ export const updateSettings = (
     upSound: upSound ?? null,
   });
 
+/** Toggle the macOS Dock icon. Persists + applies live; no-op on non-macOS. */
+export const setHideDock = (enabled: boolean) =>
+  invoke<Config>("set_hide_dock", { enabled });
+
+/**
+ * On startup: returns this version's CHANGELOG notes once if the app version changed since
+ * we last showed them (any update path), else null. Records the version so it shows only once.
+ */
+export const takeNewChangelog = () =>
+  invoke<{ version: string; body: string } | null>("take_new_changelog");
+
 /** Subscribe to live snapshot pushes. Returns a promise of the unlisten fn. */
 export const onStatusUpdate = (cb: (s: Snapshot) => void): Promise<UnlistenFn> =>
   listen<Snapshot>("status-update", (event) => cb(event.payload));

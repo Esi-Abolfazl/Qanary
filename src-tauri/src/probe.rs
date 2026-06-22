@@ -320,6 +320,8 @@ mod tests {
             down_sound: true,
             up_notify: false,
             up_sound: true,
+            hide_dock: false,
+            last_changelog_version: None,
         };
         let lists = checking_lists(&config);
         assert_eq!(lists.len(), 1);

@@ -77,6 +77,8 @@ export interface Config {
   down_sound: boolean;
   up_notify: boolean;
   up_sound: boolean;
+  hide_dock: boolean;
+  last_changelog_version: string | null;
 }
 
 // ----- Input types for add/edit commands -----

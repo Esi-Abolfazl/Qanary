@@ -44,6 +44,8 @@ export async function downloadUpdate(
 /** Installs the downloaded update and relaunches the app. */
 export async function installAndRelaunch(): Promise<void> {
   if (!pending) throw new Error("no downloaded update");
+  // Changelog is shown on next boot via take_new_changelog (version-change detection),
+  // so nothing to persist here.
   await pending.install();
   await relaunch();
 }

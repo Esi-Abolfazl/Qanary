@@ -7,6 +7,7 @@ import { ServiceList } from "./components/ServiceList";
 import { Settings } from "./components/Settings";
 import { ListModal } from "./components/ListModal";
 import { ServiceModal } from "./components/ServiceModal";
+import { ChangelogModal } from "./components/ChangelogModal";
 import { serviceToText } from "./utils/parseServices";
 import { checkForUpdate, downloadUpdate, installAndRelaunch } from "./update";
 import { criticalTransitions } from "./utils/transitions";
@@ -38,6 +39,8 @@ function App() {
   const [modal, setModal] = useState<ModalState>(null);
   const [updatePhase, setUpdatePhase] = useState<UpdatePhase | null>(null);
   const [downloadProgress, setDownloadProgress] = useState(0);
+  // Changelog shown once after a self-update relaunch.
+  const [changelog, setChangelog] = useState<{ version: string; body: string } | null>(null);
   // Holds the previous snapshot so we can diff for Transitions on each update.
   const prevSnapshotRef = useRef<Snapshot | null>(null);
 
@@ -91,6 +94,9 @@ function App() {
   useEffect(() => {
     api.getSnapshot().then((s) => s && handleSnapshot(s));
     api.getConfig().then(setConfig);
+    // Show the "What's new" changelog once when the app version changed since last launch.
+    // Backend reads the bundled CHANGELOG, so this fires for any update path (in-app or manual).
+    api.takeNewChangelog().then((cl) => cl && setChangelog(cl));
     let unlisten: (() => void) | undefined;
     api.onStatusUpdate(handleSnapshot).then((fn) => {
       unlisten = fn;
@@ -225,6 +231,14 @@ function App() {
           initial={modal.kind === "editService" ? modal.initial : undefined}
           onSave={handleSaveService}
           onClose={() => setModal(null)}
+        />
+      )}
+
+      {changelog && (
+        <ChangelogModal
+          version={changelog.version}
+          body={changelog.body}
+          onClose={() => setChangelog(null)}
         />
       )}
 

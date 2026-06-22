@@ -290,7 +290,7 @@ body {
 }
 .update-btn:hover:not(:disabled) {
   background: var(--brand);
-  color: #fff;
+  color: var(--brand-ink);
 }
 .update-btn-progress {
   cursor: default;
@@ -302,7 +302,7 @@ body {
 }
 .update-btn-ready {
   background: var(--brand);
-  color: #fff;
+  color: var(--brand-ink);
 }
 .update-btn-ready:hover {
   opacity: 0.85;
@@ -695,13 +695,12 @@ body {
   position: fixed;
   inset: 0;
   background: rgba(0, 0, 0, 0.55);
+  /* Plain flex centring — computed correctly on first paint (no margin-auto inside an
+   * overflow-scroll container, which was the reflow quirk). The modal scrolls internally
+   * when taller than the viewport, so this container never needs to scroll or clip. */
   display: flex;
-  /* flex-start + auto margins on the modal: centers when it fits, scrolls from
-   * the top when taller than the viewport. Keeps the overlay the scroll target
-   * so focusing an input never yanks the page and trims the modal padding. */
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
-  overflow-y: auto;
   padding: 24px 16px;
   z-index: 300;
 }
@@ -713,11 +712,65 @@ body {
   min-width: 280px;
   max-width: 360px;
   width: 100%;
-  margin: auto; /* vertical-center within the scrollable overlay when it fits */
+  /* Cap to the viewport (minus overlay padding) and scroll inside if the content is taller. */
+  max-height: calc(100dvh - 48px);
+  overflow-y: auto;
   box-shadow: var(--elevation);
 }
 .modal-settings {
   max-width: 420px;
+}
+.modal-changelog {
+  max-width: 480px;
+}
+.changelog-body {
+  font-size: 13px;
+  line-height: 1.55;
+  max-height: 360px;
+  overflow-y: auto;
+  word-break: break-word;
+  margin: 0 0 16px;
+  color: var(--text);
+}
+.changelog-body .cl-h {
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--muted);
+  margin: 14px 0 6px;
+}
+.changelog-body .cl-h:first-child {
+  margin-top: 0;
+}
+.changelog-body .cl-p {
+  margin: 0 0 8px;
+}
+.changelog-body .cl-ul {
+  margin: 0 0 8px;
+  padding-left: 18px;
+}
+.changelog-body .cl-ul li {
+  margin: 2px 0;
+}
+.changelog-body .cl-quote {
+  margin: 8px 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--brand);
+  background: var(--bg-inset);
+  border-radius: 0 var(--r-sm) var(--r-sm) 0;
+  color: var(--muted);
+}
+.changelog-body code {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.9em;
+  padding: 1px 5px;
+  border-radius: 4px;
+  background: var(--bg-inset);
+}
+.changelog-body strong {
+  font-weight: 700;
+  color: var(--text-strong);
 }
 .modal-title {
   margin: 0 0 16px;
@@ -898,6 +951,66 @@ body {
   border-radius: 999px;
 }
 
+.system-toggle-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text);
+  margin: 2px 0 0;
+}
+.system-toggle-label {
+  user-select: none;
+  cursor: pointer;
+}
+.system-toggle-error {
+  font-size: 11px;
+  color: var(--state-down, #e03131);
+  margin-top: 2px;
+}
+
+/* CSS toggle switch — hides the native checkbox, styles a sliding track. */
+.switch {
+  position: relative;
+  display: inline-flex;
+  cursor: pointer;
+}
+.switch input {
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+.switch-track {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  border-radius: 999px;
+  background: var(--border);
+  transition: background 0.15s ease;
+}
+.switch-track::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s ease;
+}
+.switch input:checked + .switch-track {
+  background: var(--brand, #ffcc00);
+}
+.switch input:checked + .switch-track::after {
+  transform: translateX(16px);
+}
+.switch input:focus-visible + .switch-track {
+  outline: 2px solid var(--brand, #ffcc00);
+  outline-offset: 2px;
+}
+
 .alert-grid {
   display: grid;
   grid-template-columns: 1fr auto auto;
@@ -906,6 +1019,19 @@ body {
   font-size: 13px;
   color: var(--text);
   margin: 2px 0 0;
+}
+
+/* Gold brand accent on the alert checkboxes, matching the switch. */
+.alert-grid input[type="checkbox"] {
+  accent-color: var(--brand, #ffcc00);
+  width: 18px;
+  height: 18px;
+  justify-self: center;
+}
+
+/* Keep the column headers centered over their checkbox column. */
+.alert-grid-head {
+  justify-self: center;
 }
 
 .alert-grid-head {

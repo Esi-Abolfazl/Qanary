@@ -1,8 +1,11 @@
 import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
+import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
 import type { Config } from "../types";
 import { parseHost } from "../utils/parseHost";
 import { checkForUpdate, downloadUpdate, installAndRelaunch, type UpdateInfo } from "../update";
+import { setHideDock } from "../api";
+import { Switch } from "./Switch";
 
 type UpdateState =
   | "idle"
@@ -44,25 +47,41 @@ export function Settings({
   const [downSound, setDownSound] = useState(true);
   const [upNotify, setUpNotify] = useState(false);
   const [upSound, setUpSound] = useState(true);
-  const [seeded, setSeeded] = useState(false);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateState, setUpdateState] = useState<UpdateState>("idle");
   const [version, setVersion] = useState("");
+  // System settings: launch-at-login + hide-dock (macOS).
+  const [loginEnabled, setLoginEnabled] = useState(false);
+  const [loginInitial, setLoginInitial] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [hideDock, setHideDockState] = useState(false);
+  const [hideDockError, setHideDockError] = useState<string | null>(null);
+  const isMac = navigator.userAgent.includes("Mac");
 
   useEffect(() => {
     getVersion().then(setVersion).catch(() => {});
   }, []);
 
+  // Re-seed every time the modal opens, so closing without Save discards pending edits
+  // (reopening always shows the real, persisted state).
   useEffect(() => {
-    if (config && !seeded) {
-      setSlots(toSlots(config.ip_providers));
-      setDownNotify(config.down_notify);
-      setDownSound(config.down_sound);
-      setUpNotify(config.up_notify);
-      setUpSound(config.up_sound);
-      setSeeded(true);
-    }
-  }, [config, seeded]);
+    if (!open || !config) return;
+    setSlots(toSlots(config.ip_providers));
+    setDownNotify(config.down_notify);
+    setDownSound(config.down_sound);
+    setUpNotify(config.up_notify);
+    setUpSound(config.up_sound);
+    setHideDockState(config.hide_dock);
+    setHideDockError(null);
+    setLoginError(null);
+    // Launch-at-login lives in the OS — query it fresh as the baseline.
+    isEnabled()
+      .then((on) => {
+        setLoginEnabled(on);
+        setLoginInitial(on);
+      })
+      .catch(() => {});
+  }, [open, config]);
 
   function setSlot(i: number, val: string) {
     setSlots((prev) => {
@@ -72,8 +91,33 @@ export function Settings({
     });
   }
 
-  function handleSave(e: React.FormEvent) {
+  async function handleSave(e: React.FormEvent) {
     e.preventDefault();
+    setLoginError(null);
+    setHideDockError(null);
+
+    // Apply system toggles only on Save. If any fails, surface the error and keep the
+    // modal open so the user sees it instead of silently closing.
+    let ok = true;
+    try {
+      if (loginEnabled !== loginInitial) {
+        if (loginEnabled) await enable(); else await disable();
+      }
+    } catch {
+      setLoginError("Could not update login item");
+      ok = false;
+    }
+    try {
+      if (hideDock !== (config?.hide_dock ?? false)) {
+        await setHideDock(hideDock);
+      }
+    } catch {
+      setHideDockError("Could not change dock setting");
+      ok = false;
+    }
+    if (!ok) return;
+    setLoginInitial(loginEnabled); // applied state is the new baseline
+
     const providers = slots.map(parseHost).filter(Boolean);
     onSave(providers, downNotify, downSound, upNotify, upSound);
     onClose();
@@ -161,6 +205,41 @@ export function Settings({
                 onChange={(e) => setUpSound(e.target.checked)}
               />
             </div>
+          </fieldset>
+
+          <fieldset className="settings-card">
+            <legend className="settings-card-title">System</legend>
+            <div className="system-toggle-row">
+              <label className="system-toggle-label" htmlFor="login-toggle">
+                Launch at login
+              </label>
+              <Switch
+                id="login-toggle"
+                checked={loginEnabled}
+                onChange={setLoginEnabled}
+              />
+            </div>
+            {loginError && (
+              <span className="system-toggle-error">{loginError}</span>
+            )}
+
+            {isMac && (
+              <>
+                <div className="system-toggle-row">
+                  <label className="system-toggle-label" htmlFor="dock-toggle">
+                    Hide Dock icon
+                  </label>
+                  <Switch
+                    id="dock-toggle"
+                    checked={hideDock}
+                    onChange={setHideDockState}
+                  />
+                </div>
+                {hideDockError && (
+                  <span className="system-toggle-error">{hideDockError}</span>
+                )}
+              </>
+            )}
           </fieldset>
 
           <div className="modal-actions">

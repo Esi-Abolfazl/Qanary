@@ -83,6 +83,12 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_notification::init())
+        // Launch-on-login: register as a macOS LaunchAgent; inject --hidden so autostart
+        // launches into the tray without showing the main window.
+        .plugin(tauri_plugin_autostart::init(
+            tauri_plugin_autostart::MacosLauncher::LaunchAgent,
+            Some(vec!["--hidden"]),
+        ))
         .setup(|app| {
             // Config path inside the per-app config dir (created on first save).
             let config_path = app
@@ -105,6 +111,9 @@ pub fn run() {
                 .build()
                 .expect("build HTTP client");
 
+            // Snapshot the flags we need before moving `config` into the managed state.
+            let hide_dock = config.hide_dock;
+
             app.manage(AppState {
                 config: Mutex::new(config),
                 config_path,
@@ -112,6 +121,19 @@ pub fn run() {
                 snapshot: Mutex::new(None),
                 wan: Mutex::new(None),
             });
+
+            // macOS only: suppress the Dock icon when the user opted into tray-only mode.
+            #[cfg(target_os = "macos")]
+            if hide_dock {
+                let _ = app.handle().set_activation_policy(tauri::ActivationPolicy::Accessory);
+            }
+
+            // Autostart launches with --hidden: keep the window hidden (tray-only start).
+            if std::env::args().any(|a| a == "--hidden") {
+                if let Some(win) = app.get_webview_window("main") {
+                    let _ = win.hide();
+                }
+            }
 
             // Build the tray icon before emit_checking so update_icon finds the handle.
             tray::build_tray(app.handle())?;
@@ -165,6 +187,8 @@ pub fn run() {
             commands::reset_config,
             commands::update_settings,
             commands::set_list_collapsed,
+            commands::set_hide_dock,
+            commands::take_new_changelog,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
