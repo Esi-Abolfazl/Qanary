@@ -4,11 +4,14 @@
 
 ---
 
-Desktop connectivity monitor. Traffic-light status for whether your machine can reach a list of services — useful on restricted or censored networks where some services are blocked and others aren't.
+> Miners once carried a [canary down the shaft](https://en.wikipedia.org/wiki/Sentinel_species) — the little bird keeled over from toxic gas long before the crew felt a thing, buying them the minutes that mattered. **Qanary** is that bird for your network: it chirps the moment something you rely on stops answering, so you know before it bites.
 
-<div align="center">
-  <img src="public/qanary-screenshot.jpg" alt="Qanary showing Global and Iran service lists, all reachable" width="380" />
-</div>
+<p align="center">
+  <img src="public/qanary-screenshot-dark.jpg" alt="Qanary dark theme" width="380" />
+  <img src="public/qanary-screenshot-light.jpg" alt="Qanary light theme" width="380" />
+</p>
+
+Desktop connectivity monitor. Traffic-light status for whether your machine can reach a list of services — useful on restricted or censored networks where some services are blocked and others aren't.
 
 | Severity  | When                                     |
 | --------- | ---------------------------------------- |
