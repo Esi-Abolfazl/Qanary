@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import "./App.css";
 import * as api from "./api";
-import type { Config, ServiceDraft, Snapshot } from "./types";
+import type { Config, ListStatus, ServiceDraft, Snapshot } from "./types";
 import { StatusHero } from "./components/StatusHero";
 import { ServiceList } from "./components/ServiceList";
 import { Settings } from "./components/Settings";
@@ -12,6 +12,17 @@ import { serviceToText } from "./utils/parseServices";
 import { checkForUpdate, downloadUpdate, installAndRelaunch } from "./update";
 import { criticalTransitions } from "./utils/transitions";
 import { fireAlert, type Dir } from "./utils/alerts";
+import {
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+  type DraggableAttributes,
+  type DraggableSyntheticListeners,
+} from "@dnd-kit/core";
+import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 // Collect Transitions for this long before firing, so several lists dropping at
 // once produce a single batched notification instead of one each.
@@ -33,12 +44,43 @@ type ModalState =
 
 export type UpdatePhase = "available" | "downloading" | "ready";
 
+// Thin sortable shell for list-level drag. Only mounted inside a DndContext (when reorderMode).
+// Calls useSortable and passes the ref/style/grip props down to ServiceList.
+export type GripProps = {
+  sortRef: (node: HTMLElement | null) => void;
+  sortStyle: React.CSSProperties;
+  gripListeners: DraggableSyntheticListeners;
+  gripAttributes: DraggableAttributes;
+};
+
+function SortableListItem({
+  list,
+  ...rest
+}: Omit<React.ComponentProps<typeof ServiceList>, keyof GripProps> & { list: ListStatus }) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: list.id });
+  const sortStyle: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+  return (
+    <ServiceList
+      {...rest}
+      list={list}
+      sortRef={setNodeRef}
+      sortStyle={sortStyle}
+      gripListeners={listeners}
+      gripAttributes={attributes}
+    />
+  );
+}
+
 function App() {
   const [snapshot, setSnapshot] = useState<Snapshot | null>(null);
   const [config, setConfig] = useState<Config | null>(null);
   const [modal, setModal] = useState<ModalState>(null);
   const [updatePhase, setUpdatePhase] = useState<UpdatePhase | null>(null);
   const [downloadProgress, setDownloadProgress] = useState(0);
+  const [reorderMode, setReorderMode] = useState(false);
   // Changelog shown once after a self-update relaunch.
   const [changelog, setChangelog] = useState<{ version: string; body: string } | null>(null);
   // Holds the previous snapshot so we can diff for Transitions on each update.
@@ -161,6 +203,32 @@ function App() {
     }
   }
 
+  // PointerSensor with a small activation distance so accidental clicks don't drag.
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  function handleListDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id || !snapshot) return;
+    const oldIndex = snapshot.lists.findIndex((l) => l.id === active.id);
+    const newIndex = snapshot.lists.findIndex((l) => l.id === over.id);
+    const reordered = arrayMove(snapshot.lists, oldIndex, newIndex);
+    setSnapshot({ ...snapshot, lists: reordered });
+    void api.reorderLists(reordered.map((l) => l.id));
+  }
+
+  function handleReorderServices(listId: string, newIds: string[]) {
+    if (!snapshot) return;
+    const newLists = snapshot.lists.map((l) => {
+      if (l.id !== listId) return l;
+      const reordered = newIds
+        .map((id) => l.services.find((s) => s.id === id))
+        .filter(Boolean) as ListStatus["services"];
+      return { ...l, services: reordered };
+    });
+    setSnapshot({ ...snapshot, lists: newLists });
+    void api.reorderServices(listId, newIds);
+  }
+
   function handleOpenEdit(listId: string, serviceId: string, listName: string) {
     const list = config?.lists.find((l) => l.id === listId);
     const svc = list?.services.find((s) => s.id === serviceId);
@@ -184,6 +252,7 @@ function App() {
         onResetConfig={() =>
           api.resetConfig().then(() => window.location.reload())
         }
+        onEditOrder={() => setReorderMode(true)}
         updatePhase={updatePhase}
         downloadProgress={downloadProgress}
         onDownload={handleDownload}
@@ -191,25 +260,61 @@ function App() {
       />
 
       <div className="lists">
-        {lists.map((list) => (
-          <ServiceList
-            key={list.id}
-            list={list}
-            onRemoveService={(lid, sid) => api.removeService(lid, sid)}
-            onRemoveList={(lid) => api.removeList(lid)}
-            onEditList={(id, name, icon, critical) =>
-              setModal({ kind: "editList", id, name, icon, critical })
-            }
-            onAddService={(listId, listName) =>
-              setModal({ kind: "addService", listId, listName })
-            }
-            onEditService={(listId, serviceId) =>
-              handleOpenEdit(listId, serviceId, list.name)
-            }
-          />
-        ))}
+        {/* ponytail: reorderMode gate — DndContext only rendered when needed; avoids
+            useSortable being called outside a context (would throw). */}
+        {reorderMode ? (
+          <DndContext sensors={sensors} onDragEnd={handleListDragEnd}>
+            <SortableContext items={lists.map((l) => l.id)} strategy={verticalListSortingStrategy}>
+              {lists.map((list) => (
+                <SortableListItem
+                  key={list.id}
+                  list={list}
+                  reorderMode={true}
+                  onReorderServices={handleReorderServices}
+                  onRemoveService={(lid, sid) => api.removeService(lid, sid)}
+                  onRemoveList={(lid) => api.removeList(lid)}
+                  onEditList={(id, name, icon, critical) =>
+                    setModal({ kind: "editList", id, name, icon, critical })
+                  }
+                  onAddService={(listId, listName) =>
+                    setModal({ kind: "addService", listId, listName })
+                  }
+                  onEditService={(listId, serviceId) =>
+                    handleOpenEdit(listId, serviceId, list.name)
+                  }
+                />
+              ))}
+            </SortableContext>
+          </DndContext>
+        ) : (
+          lists.map((list) => (
+            <ServiceList
+              key={list.id}
+              list={list}
+              reorderMode={false}
+              onReorderServices={handleReorderServices}
+              onRemoveService={(lid, sid) => api.removeService(lid, sid)}
+              onRemoveList={(lid) => api.removeList(lid)}
+              onEditList={(id, name, icon, critical) =>
+                setModal({ kind: "editList", id, name, icon, critical })
+              }
+              onAddService={(listId, listName) =>
+                setModal({ kind: "addService", listId, listName })
+              }
+              onEditService={(listId, serviceId) =>
+                handleOpenEdit(listId, serviceId, list.name)
+              }
+            />
+          ))
+        )}
         {lists.length === 0 && <p className="loading">Starting first probe…</p>}
       </div>
+
+      {reorderMode && (
+        <button className="reorder-done-btn" onClick={() => setReorderMode(false)}>
+          Done
+        </button>
+      )}
 
       {(modal?.kind === "addList" || modal?.kind === "editList") && (
         <ListModal

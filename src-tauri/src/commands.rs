@@ -278,6 +278,51 @@ pub fn set_hide_dock(app: AppHandle, enabled: bool) -> Config {
     updated
 }
 
+/// Reorder the top-level lists by id without triggering a network re-probe.
+/// Reordering is pure UI state — mirrors `set_list_collapsed` (save-only, no `mutate`).
+/// Unknown ids sink to the end of the Vec; nothing is ever silently dropped.
+#[tauri::command]
+pub fn reorder_lists(app: AppHandle, ordered_ids: Vec<String>) -> Config {
+    let state = app.state::<AppState>();
+    let updated = {
+        let mut cfg = state.config.lock().unwrap();
+        cfg.lists.sort_by_key(|x| {
+            ordered_ids
+                .iter()
+                .position(|id| id == &x.id)
+                .unwrap_or(usize::MAX)
+        });
+        cfg.clone()
+    };
+    if let Err(err) = crate::store::save(&state.config_path, &updated) {
+        eprintln!("qanary: failed to save list order: {err}");
+    }
+    updated
+}
+
+/// Reorder services within a list by id without triggering a network re-probe.
+/// Same save-only pattern as `reorder_lists` — no `mutate`, no background re-probe.
+#[tauri::command]
+pub fn reorder_services(app: AppHandle, list_id: String, ordered_ids: Vec<String>) -> Config {
+    let state = app.state::<AppState>();
+    let updated = {
+        let mut cfg = state.config.lock().unwrap();
+        if let Some(list) = cfg.lists.iter_mut().find(|l| l.id == list_id) {
+            list.services.sort_by_key(|x| {
+                ordered_ids
+                    .iter()
+                    .position(|id| id == &x.id)
+                    .unwrap_or(usize::MAX)
+            });
+        }
+        cfg.clone()
+    };
+    if let Err(err) = crate::store::save(&state.config_path, &updated) {
+        eprintln!("qanary: failed to save service order: {err}");
+    }
+    updated
+}
+
 /// Persist the collapsed/expanded state of a list without triggering a network re-probe.
 /// Collapse is a pure UI concern — firing a full probe on every chevron click would be wasteful.
 #[tauri::command]

@@ -6,6 +6,21 @@ import { parseHost } from "../utils/parseHost";
 import { checkForUpdate, downloadUpdate, installAndRelaunch, type UpdateInfo } from "../update";
 import { setHideDock } from "../api";
 import { Switch } from "./Switch";
+import {
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
+import { Icon } from "./Icon";
 
 type UpdateState =
   | "idle"
@@ -15,9 +30,50 @@ type UpdateState =
   | "up-to-date"
   | "error";
 
-function toSlots(arr: string[]): [string, string, string, string] {
-  const s = arr.concat(["", "", "", ""]).slice(0, 4);
-  return [s[0], s[1], s[2], s[3]];
+// A provider slot with a stable id so dnd-kit can track it across re-renders.
+type ProviderSlot = { id: string; value: string };
+
+let _slotSeq = 0;
+function makeSlot(value: string): ProviderSlot {
+  return { id: `slot-${_slotSeq++}`, value };
+}
+
+function toSlots(arr: string[]): ProviderSlot[] {
+  const padded = arr.concat(["", "", "", ""]).slice(0, 4);
+  return padded.map(makeSlot);
+}
+
+// One draggable provider row — calls useSortable.
+function SortableProviderSlot({
+  slot,
+  placeholder,
+  onChange,
+}: {
+  slot: ProviderSlot;
+  placeholder: string;
+  onChange: (id: string, val: string) => void;
+}) {
+  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: slot.id });
+  const style = { transform: CSS.Transform.toString(transform), transition };
+  return (
+    <div className="provider-slot" ref={setNodeRef} style={style}>
+      <button
+        type="button"
+        className="provider-grip-btn"
+        {...listeners}
+        {...attributes}
+        title="Drag to reorder"
+      >
+        <Icon name="grip" size={14} />
+      </button>
+      <input
+        className="provider-input provider-input-sortable"
+        placeholder={placeholder}
+        value={slot.value}
+        onChange={(e) => onChange(slot.id, e.target.value)}
+      />
+    </div>
+  );
 }
 
 export function Settings({
@@ -37,12 +93,7 @@ export function Settings({
     upSound: boolean,
   ) => void;
 }) {
-  const [slots, setSlots] = useState<[string, string, string, string]>([
-    "",
-    "",
-    "",
-    "",
-  ]);
+  const [slots, setSlots] = useState<ProviderSlot[]>(() => toSlots([]));
   const [downNotify, setDownNotify] = useState(true);
   const [downSound, setDownSound] = useState(true);
   const [upNotify, setUpNotify] = useState(false);
@@ -83,12 +134,18 @@ export function Settings({
       .catch(() => {});
   }, [open, config]);
 
-  function setSlot(i: number, val: string) {
-    setSlots((prev) => {
-      const next = [...prev] as [string, string, string, string];
-      next[i] = val;
-      return next;
-    });
+  function updateSlotValue(id: string, val: string) {
+    setSlots((prev) => prev.map((s) => (s.id === id ? { ...s, value: val } : s)));
+  }
+
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+
+  function handleProviderDragEnd(event: DragEndEvent) {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+    const oldIndex = slots.findIndex((s) => s.id === active.id);
+    const newIndex = slots.findIndex((s) => s.id === over.id);
+    setSlots(arrayMove(slots, oldIndex, newIndex));
   }
 
   async function handleSave(e: React.FormEvent) {
@@ -118,7 +175,7 @@ export function Settings({
     if (!ok) return;
     setLoginInitial(loginEnabled); // applied state is the new baseline
 
-    const providers = slots.map(parseHost).filter(Boolean);
+    const providers = slots.map((s) => parseHost(s.value)).filter(Boolean);
     onSave(providers, downNotify, downSound, upNotify, upSound);
     onClose();
   }
@@ -158,20 +215,21 @@ export function Settings({
 
         <form className="providers-form" onSubmit={handleSave}>
           <fieldset className="settings-card">
-            <legend className="settings-card-title">IP providers (tried in order)</legend>
-            {slots.map((p, i) => (
-              <input
-                key={i}
-                className="provider-input"
-                placeholder={
-                  ["ip.shecan.ir", "ifconfig.me/ip", "api.ipify.org", "ipify.ir"][
-                    i
-                  ]
-                }
-                value={p}
-                onChange={(e) => setSlot(i, e.target.value)}
-              />
-            ))}
+            <legend className="settings-card-title">IP providers (drag to reorder)</legend>
+            <DndContext sensors={sensors} onDragEnd={handleProviderDragEnd}>
+              <SortableContext items={slots.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+                {slots.map((slot, i) => (
+                  <SortableProviderSlot
+                    key={slot.id}
+                    slot={slot}
+                    placeholder={
+                      ["ip.shecan.ir", "ifconfig.me/ip", "api.ipify.org", "ipify.ir"][i]
+                    }
+                    onChange={updateSlotValue}
+                  />
+                ))}
+              </SortableContext>
+            </DndContext>
           </fieldset>
 
           <fieldset className="settings-card">

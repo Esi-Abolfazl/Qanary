@@ -39,6 +39,14 @@ export const resetConfig = () => invoke<Config>("reset_config");
 export const setListCollapsed = (listId: string, collapsed: boolean) =>
   invoke<void>("set_list_collapsed", { listId, collapsed });
 
+/** Reorder top-level lists by id. Save-only — no re-probe. */
+export const reorderLists = (orderedIds: string[]) =>
+  invoke<Config>("reorder_lists", { orderedIds });
+
+/** Reorder services within a list by id. Save-only — no re-probe. */
+export const reorderServices = (listId: string, orderedIds: string[]) =>
+  invoke<Config>("reorder_services", { listId, orderedIds });
+
 export const updateSettings = (
   probeIntervalSecs?: number,
   timeoutMs?: number,

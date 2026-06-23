@@ -77,6 +77,17 @@ const ICONS: Record<string, JSX.Element> = {
       <line x1="12" x2="12" y1="17" y2="21" />
     </>
   ),
+  // grip (drag handle — six dot grid)
+  grip: (
+    <>
+      <circle cx="9" cy="6" r="1" />
+      <circle cx="15" cy="6" r="1" />
+      <circle cx="9" cy="12" r="1" />
+      <circle cx="15" cy="12" r="1" />
+      <circle cx="9" cy="18" r="1" />
+      <circle cx="15" cy="18" r="1" />
+    </>
+  ),
 };
 
 export function Icon({

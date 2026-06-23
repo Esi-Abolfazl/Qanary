@@ -1152,3 +1152,87 @@ button:disabled {
   display: inline-block;
   animation: spin 0.8s linear infinite;
 }
+
+/* ---------- Drag-and-drop reorder (lists + services + IP providers) ---------- */
+
+/* Grip handle button — shared base for list, row, and provider grips. */
+.list-grip-btn,
+.row-grip-btn,
+.provider-grip-btn {
+  background: none;
+  border: none;
+  color: var(--text-muted);
+  cursor: grab;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 0;
+  border-radius: 4px;
+  touch-action: none; /* required by dnd-kit PointerSensor */
+}
+.list-grip-btn:hover,
+.row-grip-btn:hover,
+.provider-grip-btn:hover {
+  color: var(--text-strong);
+}
+.list-grip-btn:active,
+.row-grip-btn:active,
+.provider-grip-btn:active {
+  cursor: grabbing;
+}
+
+/* List-level grip: same footprint as other .list-menu-btn buttons */
+.list-grip-btn {
+  width: 24px;
+  height: 24px;
+}
+
+/* Service-row grip: replaces the 16×16 dot slot */
+.row-grip-btn {
+  width: 16px;
+  height: 16px;
+}
+
+/* List section while reorder mode is active — subtle dashed outline. */
+.list-reorder {
+  outline: 1px dashed var(--border);
+}
+
+/* Floating Done button — bottom-right, above all other content. */
+.reorder-done-btn {
+  position: fixed;
+  bottom: var(--sp-4, 16px);
+  right: var(--sp-4, 16px);
+  background: var(--brand);
+  color: var(--brand-ink);
+  border: none;
+  border-radius: var(--r-md);
+  padding: 10px 24px;
+  font-size: var(--text-md);
+  font-weight: 700;
+  cursor: pointer;
+  z-index: 250;
+  box-shadow: var(--elevation);
+  transition: background 0.15s;
+}
+.reorder-done-btn:hover {
+  background: var(--brand-press);
+}
+
+/* IP provider sortable slot: grip + input side-by-side */
+.provider-slot {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.provider-grip-btn {
+  width: 20px;
+  height: 28px;
+  flex-shrink: 0;
+}
+/* Input inside sortable slot fills remaining width (overrides width: 100%) */
+.provider-input-sortable {
+  width: 0;
+  flex: 1 1 auto;
+}

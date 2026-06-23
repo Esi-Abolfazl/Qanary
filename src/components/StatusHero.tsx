@@ -82,6 +82,7 @@ export function StatusHero({
   onAddList,
   onOpenSettings,
   onResetConfig,
+  onEditOrder,
   updatePhase,
   downloadProgress,
   onDownload,
@@ -92,6 +93,7 @@ export function StatusHero({
   onAddList: () => void;
   onOpenSettings: () => void;
   onResetConfig: () => void;
+  onEditOrder: () => void;
   updatePhase: UpdatePhase | null;
   downloadProgress: number;
   onDownload: () => void;
@@ -172,6 +174,10 @@ export function StatusHero({
                   <button className="menu-item" onClick={() => pick(onAddList)}>
                     <Icon name="plus" size={14} />
                     <span>Add list</span>
+                  </button>
+                  <button className="menu-item" onClick={() => pick(onEditOrder)}>
+                    <Icon name="grip" size={14} />
+                    <span>Edit order</span>
                   </button>
                   <button
                     className="menu-item"

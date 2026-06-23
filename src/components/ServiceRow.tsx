@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { ServiceState, ServiceStatus } from "../types";
 import { Icon } from "./Icon";
+import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/core";
 
 const STATE_TITLE: Record<ServiceState, string> = {
   up: "Reachable",
@@ -13,10 +14,18 @@ export function ServiceRow({
   status,
   onRemove,
   onEdit,
+  sortRef,
+  sortStyle,
+  gripListeners,
+  gripAttributes,
 }: {
   status: ServiceStatus;
   onRemove: () => Promise<unknown>;
   onEdit: () => void;
+  sortRef?: (node: HTMLLIElement | null) => void;
+  sortStyle?: React.CSSProperties;
+  gripListeners?: DraggableSyntheticListeners;
+  gripAttributes?: DraggableAttributes;
 }) {
   const [busy, setBusy] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -63,12 +72,26 @@ export function ServiceRow({
 
   const faviconHost = primaryEndpoint?.host ?? "";
 
+  const inReorderMode = Boolean(gripListeners);
+
   return (
-    <li className="row">
-      <span
-        className={`dot dot-${status.state}`}
-        title={STATE_TITLE[status.state]}
-      />
+    <li className="row" ref={sortRef} style={sortStyle}>
+      {inReorderMode ? (
+        // In reorder mode: replace the status dot with a drag grip in the same left slot.
+        <button
+          className="row-grip-btn"
+          {...gripListeners}
+          {...gripAttributes}
+          title="Drag to reorder"
+        >
+          <Icon name="grip" size={14} />
+        </button>
+      ) : (
+        <span
+          className={`dot dot-${status.state}`}
+          title={STATE_TITLE[status.state]}
+        />
+      )}
       <img
         className="row-favicon"
         src={`https://www.google.com/s2/favicons?domain=${encodeURIComponent(faviconHost)}&sz=64`}

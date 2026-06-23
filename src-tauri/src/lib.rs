@@ -187,6 +187,8 @@ pub fn run() {
             commands::reset_config,
             commands::update_settings,
             commands::set_list_collapsed,
+            commands::reorder_lists,
+            commands::reorder_services,
             commands::set_hide_dock,
             commands::take_new_changelog,
         ])
