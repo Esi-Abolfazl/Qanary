@@ -1,7 +1,4 @@
-// Self-check for criticalTransitions — run with: npx tsx src/utils/transitions.test.ts
-// ponytail: no framework, plain assert; upgrade to vitest if a test suite is added.
-
-import assert from "node:assert/strict";
+import { describe, it, expect } from "vitest";
 import { criticalTransitions } from "./transitions";
 import type { ListStatus } from "../types";
 
@@ -9,31 +6,46 @@ function mkList(id: string, critical: boolean, all_down: boolean): ListStatus {
   return { id, name: id, icon: "", services: [], all_down, collapsed: false, critical };
 }
 
-// no prev → no transitions (first load, no baseline)
-assert.deepEqual(criticalTransitions([], [mkList("a", true, true)]), []);
+describe("criticalTransitions", () => {
+  it("no prev → no transitions (first load)", () => {
+    expect(criticalTransitions([], [mkList("a", true, true)])).toEqual([]);
+  });
 
-// critical flip to down
-assert.deepEqual(
-  criticalTransitions([mkList("a", true, false)], [mkList("a", true, true)]),
-  [{ id: "a", name: "a", dir: "down" }],
-);
+  it("critical list flips to down", () => {
+    expect(
+      criticalTransitions([mkList("a", true, false)], [mkList("a", true, true)]),
+    ).toEqual([{ id: "a", name: "a", dir: "down" }]);
+  });
 
-// critical flip to up
-assert.deepEqual(
-  criticalTransitions([mkList("a", true, true)], [mkList("a", true, false)]),
-  [{ id: "a", name: "a", dir: "up" }],
-);
+  it("critical list flips to up", () => {
+    expect(
+      criticalTransitions([mkList("a", true, true)], [mkList("a", true, false)]),
+    ).toEqual([{ id: "a", name: "a", dir: "up" }]);
+  });
 
-// non-critical list ignored even if all_down flips
-assert.deepEqual(
-  criticalTransitions([mkList("b", false, false)], [mkList("b", false, true)]),
-  [],
-);
+  it("non-critical list ignored even when all_down flips", () => {
+    expect(
+      criticalTransitions([mkList("b", false, false)], [mkList("b", false, true)]),
+    ).toEqual([]);
+  });
 
-// no change → no transitions
-assert.deepEqual(
-  criticalTransitions([mkList("a", true, true)], [mkList("a", true, true)]),
-  [],
-);
+  it("no change → no transitions", () => {
+    expect(
+      criticalTransitions([mkList("a", true, true)], [mkList("a", true, true)]),
+    ).toEqual([]);
+  });
 
-console.log("transitions.test.ts: all checks passed ✓");
+  it("list absent from prev skipped (added mid-session)", () => {
+    expect(criticalTransitions([], [mkList("new", true, true)])).toEqual([]);
+  });
+
+  it("multiple critical lists — returns one Transition each", () => {
+    const result = criticalTransitions(
+      [mkList("a", true, false), mkList("b", true, true)],
+      [mkList("a", true, true), mkList("b", true, false)],
+    );
+    expect(result).toContainEqual({ id: "a", name: "a", dir: "down" });
+    expect(result).toContainEqual({ id: "b", name: "b", dir: "up" });
+    expect(result).toHaveLength(2);
+  });
+});

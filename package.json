@@ -11,7 +11,10 @@
     "app:dev": "tauri dev",
     "app:build": "tauri build",
     "check": "tsc --noEmit",
-    "test": "cd src-tauri && cargo test"
+    "test:ui": "vitest run",
+    "test:rust": "cd src-tauri && cargo test",
+    "test": "pnpm test:ui && pnpm test:rust",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@dnd-kit/core": "^6.3.1",
@@ -27,11 +30,17 @@
     "react-dom": "^19.1.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@tauri-apps/cli": "^2",
+    "@testing-library/jest-dom": "^6.9.1",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
+    "jsdom": "^29.1.1",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4"
+    "vite": "^7.0.4",
+    "vitest": "^4.1.9"
   }
 }
