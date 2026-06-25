@@ -738,7 +738,9 @@ body {
   text-transform: uppercase;
   letter-spacing: 0.3px;
   color: var(--muted);
-  margin: 14px 0 6px;
+  margin: 16px 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
 }
 .changelog-body .cl-h:first-child {
   margin-top: 0;
@@ -771,6 +773,16 @@ body {
 .changelog-body strong {
   font-weight: 700;
   color: var(--text-strong);
+}
+.changelog-body .cl-link {
+  color: var(--brand);
+  text-decoration: underline;
+  cursor: pointer;
+}
+.changelog-body .cl-hr {
+  margin: 14px 0;
+  border: 0;
+  border-top: 1px solid var(--border);
 }
 .modal-title {
   margin: 0 0 16px;

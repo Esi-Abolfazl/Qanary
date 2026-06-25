@@ -1,23 +1,42 @@
 import { Fragment, type ReactNode } from "react";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 /**
  * Render the small Markdown subset our CHANGELOG uses: `###` headings, `-`/`*` lists,
- * `>` blockquotes, paragraphs, with inline `**bold**` and `` `code` ``.
+ * `>` blockquotes, `---` rules, paragraphs, with inline `**bold**`, `` `code` ``,
+ * and `[text](url)` links (opened in the system browser).
  * Deliberately tiny — input is our own release notes, not arbitrary Markdown.
  */
 // ponytail: subset renderer, not CommonMark. Swap for react-markdown only if notes
-//           ever need tables/links/nested lists.
+//           ever need tables/images/nested lists.
 function inline(text: string): ReactNode[] {
   const out: ReactNode[] = [];
-  const re = /\*\*([^*]+)\*\*|`([^`]+)`/g;
+  const re = /\*\*([^*]+)\*\*|`([^`]+)`|\[([^\]]+)\]\(([^)]+)\)/g;
   let last = 0;
   let m: RegExpExecArray | null;
   let k = 0;
   while ((m = re.exec(text))) {
     if (m.index > last) out.push(<Fragment key={k++}>{text.slice(last, m.index)}</Fragment>);
-    out.push(
-      m[1] ? <strong key={k++}>{m[1]}</strong> : <code key={k++}>{m[2]}</code>,
-    );
+    if (m[1]) {
+      out.push(<strong key={k++}>{m[1]}</strong>);
+    } else if (m[2]) {
+      out.push(<code key={k++}>{m[2]}</code>);
+    } else {
+      const href = m[4];
+      out.push(
+        <a
+          key={k++}
+          href={href}
+          className="cl-link"
+          onClick={(e) => {
+            e.preventDefault();
+            void openUrl(href);
+          }}
+        >
+          {m[3]}
+        </a>,
+      );
+    }
     last = re.lastIndex;
   }
   if (last < text.length) out.push(<Fragment key={k++}>{text.slice(last)}</Fragment>);
@@ -35,7 +54,10 @@ function renderMarkdown(body: string): ReactNode[] {
       i++;
       continue;
     }
-    if (/^#{1,6}\s/.test(line)) {
+    if (/^(-{3,}|\*{3,}|_{3,})$/.test(line.trim())) {
+      blocks.push(<hr key={key++} className="cl-hr" />);
+      i++;
+    } else if (/^#{1,6}\s/.test(line)) {
       blocks.push(
         <h4 key={key++} className="cl-h">
           {inline(line.replace(/^#{1,6}\s/, ""))}

@@ -215,7 +215,39 @@ pub fn take_new_changelog(app: AppHandle) -> Option<ChangelogPayload> {
         eprintln!("qanary: failed to save last_changelog_version: {err}");
     }
 
-    changelog_section(CHANGELOG, &running).map(|body| ChangelogPayload { version: running, body })
+    changelog_section(CHANGELOG, &running)
+        .map(|body| modal_notes(&body))
+        .filter(|body| !body.trim().is_empty())
+        .map(|body| ChangelogPayload { version: running, body })
+}
+
+/// Subsection headings that are dev-log only — added to CHANGELOG.md for the GitHub release
+/// page but hidden from the in-app modal. Add a heading here to keep its section out of the modal.
+const DEV_ONLY_HEADINGS: &[&str] =
+    &["internal", "dev", "development", "chore", "ci", "build", "more info"];
+
+/// Strip notes that are only meant for the GitHub release page — any dev-only subsection
+/// ([`DEV_ONLY_HEADINGS`]) — so the in-app modal shows only user-facing changes. The GitHub
+/// release body (awk extractor in release.yml) keeps the full section.
+fn modal_notes(section: &str) -> String {
+    let mut out: Vec<&str> = Vec::new();
+    let mut skipping = false;
+    for line in section.lines() {
+        let t = line.trim();
+        if let Some(title) = t.strip_prefix("## ") {
+            // Drop dev-only subsections; resume keeping at the next heading.
+            skipping = DEV_ONLY_HEADINGS
+                .iter()
+                .any(|h| title.trim().eq_ignore_ascii_case(h));
+            if skipping {
+                continue;
+            }
+        }
+        if !skipping {
+            out.push(line);
+        }
+    }
+    out.join("\n").trim_matches('\n').to_string()
 }
 
 /// Extract the notes under `## [version]` up to the next `## [` version heading, trimmed of
@@ -236,7 +268,7 @@ fn changelog_section(changelog: &str, version: &str) -> Option<String> {
 
 #[cfg(test)]
 mod changelog_tests {
-    use super::changelog_section;
+    use super::{changelog_section, modal_notes};
 
     const SAMPLE: &str = "# Changelog\n\n## [0.4.5]\n\n## What's new\n- a\n- b\n\n## Fix\n- c\n\n## [0.4.0]\n- old\n";
 
@@ -251,6 +283,19 @@ mod changelog_tests {
     #[test]
     fn missing_version_is_none() {
         assert!(changelog_section(SAMPLE, "9.9.9").is_none());
+    }
+
+    #[test]
+    fn modal_notes_drops_dev_sections_and_footer() {
+        let section = "## What's new\n- a\n\n## Internal\n- test harness\n\n## More info\n- [ADR](url)";
+        let got = modal_notes(section);
+        assert_eq!(got, "## What's new\n- a", "drops Internal + More info: {got:?}");
+    }
+
+    #[test]
+    fn modal_notes_keeps_user_sections() {
+        let section = "## What's new\n- a\n\n## Fix\n- c";
+        assert_eq!(modal_notes(section), section, "keeps non-dev headings");
     }
 }
 
