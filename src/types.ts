@@ -44,6 +44,18 @@ export interface Snapshot {
   wan: WanInfo | null;
 }
 
+/**
+ * A per-Service Status delta pushed on `service-update`: one Service's new status plus its
+ * List's recomputed `all_down` and the new overall Severity. Merged into the local Snapshot.
+ * Mirrors `ServiceDelta` in `src-tauri/src/models.rs`.
+ */
+export interface ServiceDelta {
+  list_id: string;
+  service: ServiceStatus;
+  list_all_down: boolean;
+  overall: Severity;
+}
+
 // ----- Persisted config (returned by mutation commands) -----
 
 export interface Endpoint {

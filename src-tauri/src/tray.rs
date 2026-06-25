@@ -269,13 +269,10 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         .on_menu_event(|app, event| match event.id().as_ref() {
             ID_SHOW_HIDE => toggle_window(app),
             ID_REFRESH => {
-                // Mirror the in-app refresh_now command: flash the checking state so the
-                // UI visibly reacts, then probe everything + refresh WAN.
-                let handle = app.clone();
-                tauri::async_runtime::spawn(async move {
-                    crate::emit_checking(&handle);
-                    crate::run_cycle(&handle, true).await;
-                });
+                // Mirror the in-app refresh_now command: flash the checking state, then broadcast
+                // "probe now" so every Service probe task (and the WAN task) wakes immediately.
+                crate::emit_checking(app);
+                let _ = app.state::<crate::state::AppState>().probe_now.send(());
             }
             ID_QUIT => app.exit(0),
             _ => {}

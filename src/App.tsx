@@ -12,6 +12,7 @@ import { serviceToText } from "./utils/parseServices";
 import { checkForUpdate, downloadUpdate, installAndRelaunch } from "./update";
 import { criticalTransitions } from "./utils/transitions";
 import { fireAlert, type Dir } from "./utils/alerts";
+import { mergeDelta } from "./utils/mergeDelta";
 import {
   DndContext,
   PointerSensor,
@@ -139,9 +140,19 @@ function App() {
     // Show the "What's new" changelog once when the app version changed since last launch.
     // Backend reads the bundled CHANGELOG, so this fires for any update path (in-app or manual).
     api.takeNewChangelog().then((cl) => cl && setChangelog(cl));
-    let unlisten: (() => void) | undefined;
+    // status-update = full snapshot (WAN refresh + initial). service-update = per-Service delta,
+    // merged onto the latest snapshot before running the same transition/alert diff.
+    let unlistenStatus: (() => void) | undefined;
+    let unlistenService: (() => void) | undefined;
     api.onStatusUpdate(handleSnapshot).then((fn) => {
-      unlisten = fn;
+      unlistenStatus = fn;
+    });
+    api.onServiceUpdate((d) => {
+      const base = prevSnapshotRef.current;
+      if (!base) return;
+      handleSnapshot(mergeDelta(base, d));
+    }).then((fn) => {
+      unlistenService = fn;
     });
     checkForUpdate()
       .then((info) => {
@@ -149,7 +160,8 @@ function App() {
       })
       .catch(() => {});
     return () => {
-      unlisten?.();
+      unlistenStatus?.();
+      unlistenService?.();
       if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     };
   }, []);

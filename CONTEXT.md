@@ -42,3 +42,21 @@ A change in a **critical** List's `all_down` between two consecutive snapshots:
 `false→true` is an **outage**, `true→false` is a **recovery**. The only events that fire
 a notification + sound. Non-critical Lists and per-Service flips do not transition.
 _Avoid_: change, flip, event (when you mean this specific critical-List crossing)
+
+**Service probe task**:
+One independent async task per enabled Service, owning that Service's probe cadence and
+its last-known state. Tasks run concurrently (bounded by a shared concurrency limit), so
+one slow Service never blocks the others.
+_Avoid_: worker, thread, job, scheduler (one shared scheduler is exactly what this replaces)
+
+**Status delta**:
+The per-Service push a Service probe task emits the instant its probe lands: that Service's
+new status plus its List's recomputed `all_down` and the new overall Severity. The Frontend
+merges a delta into its local Snapshot. Distinct from the full Snapshot push.
+_Avoid_: update, patch, event (bare)
+
+**Effective interval**:
+The actual sleep a Service probe task waits before its next probe, derived from the
+configured `probe_interval_secs` with backoff (longer while the Service keeps failing) and
+jitter (a small random spread so tasks don't all probe in lockstep).
+_Avoid_: delay, period, cadence (when you mean this computed value)

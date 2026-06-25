@@ -14,7 +14,7 @@
 //! from the real site by this method; it will read as `Up`.
 
 use crate::models::{
-    Config, EndpointStatus, ListStatus, ServiceList, ServiceState, ServiceStatus, Severity,
+    Config, EndpointStatus, ListStatus, Service, ServiceState, ServiceStatus, Severity,
     worst_state,
 };
 use std::sync::Arc;
@@ -24,7 +24,7 @@ use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
 
 /// Max simultaneous probes. Bounds endpoint-level concurrency even with many-endpoint services.
-const MAX_CONCURRENT: usize = 8;
+pub const MAX_CONCURRENT: usize = 8;
 
 /// Pure classifier — exercised directly by unit tests.
 ///
@@ -125,52 +125,24 @@ pub fn checking_lists(config: &Config) -> Vec<ListStatus> {
         .collect()
 }
 
-/// Probe every enabled service in `config` concurrently (bounded) and return per-list status.
-/// Disabled services are skipped entirely (not probed, not counted toward `all_down`).
-pub async fn probe_all(config: &Config, client: &reqwest::Client) -> Vec<ListStatus> {
-    let semaphore = Arc::new(Semaphore::new(MAX_CONCURRENT));
-    let timeout_ms = config.timeout_ms;
-    let mut result = Vec::with_capacity(config.lists.len());
-
-    for list in &config.lists {
-        let statuses = probe_list(list, client, &semaphore, timeout_ms).await;
-        let all_down = statuses.iter().any(|_| true) // at least one service exists
-            && !statuses.is_empty()
-            && statuses.iter().all(|s| s.fully_failing());
-        result.push(ListStatus {
-            id: list.id.clone(),
-            name: list.name.clone(),
-            icon: list.icon.clone(),
-            services: statuses,
-            all_down,
-            collapsed: list.collapsed,
-            critical: list.critical,
-        });
-    }
-    result
-}
-
-/// Probe all enabled services of a single list, each fanning out to their endpoints.
-async fn probe_list(
-    list: &ServiceList,
+/// Probe one Service: fan its endpoints out under the shared semaphore, then roll up
+/// worst-wins into a `ServiceStatus`. The caller is responsible for skipping disabled
+/// services — this always probes whatever it's handed.
+pub async fn probe_service(
+    svc: &Service,
     client: &reqwest::Client,
-    semaphore: &Arc<Semaphore>,
+    sem: &Arc<Semaphore>,
     timeout_ms: u64,
-) -> Vec<ServiceStatus> {
-    let enabled: Vec<&_> = list.services.iter().filter(|s| s.enabled).collect();
-    let mut result = Vec::with_capacity(enabled.len());
-
-    for svc in &enabled {
-        let ep_statuses = probe_service_endpoints(svc.id.as_str(), &svc.endpoints, client, semaphore, timeout_ms).await;
-        let svc_state = worst_state(&ep_statuses.iter().map(|e| e.state).collect::<Vec<_>>());
-        result.push(ServiceStatus {
-            id: svc.id.clone(),
-            label: svc.label.clone(),
-            state: svc_state,
-            endpoints: ep_statuses,
-        });
+) -> ServiceStatus {
+    let ep_statuses =
+        probe_service_endpoints(svc.id.as_str(), &svc.endpoints, client, sem, timeout_ms).await;
+    let svc_state = worst_state(&ep_statuses.iter().map(|e| e.state).collect::<Vec<_>>());
+    ServiceStatus {
+        id: svc.id.clone(),
+        label: svc.label.clone(),
+        state: svc_state,
+        endpoints: ep_statuses,
     }
-    result
 }
 
 /// Probe all endpoints of one service concurrently under the shared semaphore.
@@ -328,6 +300,20 @@ mod tests {
         assert!(!lists[0].all_down);
         assert!(lists[0].services.iter().all(|s| s.state == ServiceState::Checking));
         assert!(lists[0].services.iter().all(|s| s.endpoints.iter().all(|e| e.state == ServiceState::Checking)));
+    }
+
+    #[tokio::test]
+    async fn probe_service_rolls_up_endpoints() {
+        // 127.0.0.1:1 → connection refused → Down (no network needed, deterministic + fast).
+        let svc = Service::with_endpoints("X", vec![Endpoint::new("127.0.0.1", 1)]);
+        let client = reqwest::Client::new();
+        let sem = Arc::new(Semaphore::new(MAX_CONCURRENT));
+        let status = probe_service(&svc, &client, &sem, 500).await;
+
+        assert_eq!(status.id, svc.id);
+        assert_eq!(status.endpoints.len(), 1, "one endpoint in, one status out");
+        assert_eq!(status.state, ServiceState::Down, "refused TCP → worst-wins Down");
+        assert!(status.fully_failing());
     }
 
     #[test]

@@ -3,7 +3,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
-import type { Config, ServiceDraft, Snapshot } from "./types";
+import type { Config, ServiceDelta, ServiceDraft, Snapshot } from "./types";
 
 export const getSnapshot = () => invoke<Snapshot | null>("get_snapshot");
 export const getConfig = () => invoke<Config>("get_config");
@@ -80,3 +80,7 @@ export const takeNewChangelog = () =>
 /** Subscribe to live snapshot pushes. Returns a promise of the unlisten fn. */
 export const onStatusUpdate = (cb: (s: Snapshot) => void): Promise<UnlistenFn> =>
   listen<Snapshot>("status-update", (event) => cb(event.payload));
+
+/** Subscribe to per-Service Status deltas. Returns a promise of the unlisten fn. */
+export const onServiceUpdate = (cb: (d: ServiceDelta) => void): Promise<UnlistenFn> =>
+  listen<ServiceDelta>("service-update", (event) => cb(event.payload));

@@ -36,11 +36,16 @@ pub fn get_config(state: State<AppState>) -> Config {
     state.config.lock().unwrap().clone()
 }
 
-/// Probe everything right now (also refreshes WAN) and return the resulting snapshot.
+/// Probe everything right now: paint Checking, fire the "probe now" broadcast so every Service
+/// probe task (and the WAN task) wakes immediately, and return the current (checking) snapshot.
+/// Deltas then stream in as each probe lands.
 #[tauri::command]
-pub async fn refresh_now(app: AppHandle) -> Snapshot {
-    crate::emit_checking(&app);
-    crate::run_cycle(&app, true).await
+pub fn refresh_now(app: AppHandle) -> Snapshot {
+    crate::emit_checking(&app); // seeds AppState.snapshot with a Checking snapshot
+    let state = app.state::<AppState>();
+    let _ = state.probe_now.send(()); // Err just means no subscribers yet — harmless
+    let snapshot = state.snapshot.lock().unwrap().clone();
+    snapshot.expect("emit_checking just set the snapshot")
 }
 
 /// Add one or more services (each with their endpoints) to a list.
@@ -127,10 +132,7 @@ pub fn reset_config(app: AppHandle) -> Config {
         eprintln!("qanary: failed to save reset config: {err}");
     }
     crate::emit_checking(&app);
-    let handle = app.clone();
-    tauri::async_runtime::spawn(async move {
-        crate::run_cycle(&handle, true).await;
-    });
+    crate::scheduler::respawn_tasks(&app);
     defaults
 }
 
@@ -353,11 +355,9 @@ fn mutate<F: FnOnce(&mut Config)>(app: &AppHandle, f: F) -> Config {
     if let Err(err) = crate::store::save(&state.config_path, &updated) {
         eprintln!("qanary: failed to save config: {err}");
     }
-    // Show affected services as Checking instantly, then re-probe in the background.
+    // Show affected services as Checking instantly, then respawn the Service probe tasks against
+    // the new config (the Service set may have changed).
     crate::emit_checking(app);
-    let handle = app.clone();
-    tauri::async_runtime::spawn(async move {
-        crate::run_cycle(&handle, false).await;
-    });
+    crate::scheduler::respawn_tasks(app);
     updated
 }

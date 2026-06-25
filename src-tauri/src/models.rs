@@ -345,3 +345,14 @@ pub struct Snapshot {
     pub overall: Severity,
     pub wan: Option<WanInfo>,
 }
+
+/// A per-Service push (a **Status delta**): the instant a Service probe task's probe lands it
+/// emits this — the Service's new status, its List's recomputed `all_down`, and the new overall
+/// Severity. The frontend merges it into its local Snapshot. Mirrored in `src/types.ts`.
+#[derive(Debug, Clone, Serialize)]
+pub struct ServiceDelta {
+    pub list_id: String,
+    pub service: ServiceStatus,
+    pub list_all_down: bool,
+    pub overall: Severity,
+}

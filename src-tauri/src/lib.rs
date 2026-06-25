@@ -1,18 +1,20 @@
 //! Qanary backend entrypoint.
 //!
-//! Wires together: load config → manage shared state → register commands → spawn the background
-//! probe loop. The loop runs a cycle, emits a `status-update` event to the UI, then sleeps for the
-//! configured interval. WAN info is refreshed less often than connectivity.
+//! Wires together: load config → manage shared state → register commands → spawn one Service probe
+//! task per enabled Service plus a WAN task. Each Service task probes on its own cadence and pushes
+//! a `service-update` delta as its probe lands; the WAN task refreshes WAN and pushes a full
+//! `status-update`. See `scheduler.rs`.
 
 mod commands;
 mod models;
 mod probe;
+mod scheduler;
 mod state;
 mod store;
 mod tray;
 mod wan;
 
-use models::{Snapshot};
+use models::Snapshot;
 use state::AppState;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -21,43 +23,12 @@ use tauri::{Emitter, Manager};
 /// Event name the frontend subscribes to for live snapshot pushes.
 pub const EVENT_STATUS: &str = "status-update";
 
-/// Refresh WAN info every Nth cycle (≈ every 10 probe intervals).
-const WAN_REFRESH_EVERY: u64 = 10;
+/// Event name for a per-Service Status delta (one Service's status + its List's recomputed
+/// `all_down` + the new overall Severity). The frontend merges it into its local snapshot.
+pub const EVENT_SERVICE: &str = "service-update";
 
 /// Overall HTTP timeout for HEAD probes and the WAN lookup.
 const HTTP_TIMEOUT: Duration = Duration::from_secs(5);
-
-/// Run one full probe cycle: probe all services, optionally refresh WAN, store the snapshot, and
-/// emit it to the UI. Returns the snapshot so commands like `refresh_now` can hand it straight back.
-pub async fn run_cycle(app: &tauri::AppHandle, refresh_wan: bool) -> Snapshot {
-    let state = app.state::<AppState>();
-
-    // Clone config + client out of the lock before any await.
-    let config = state.config.lock().unwrap().clone();
-    let client = state.client.clone();
-
-    let lists = probe::probe_all(&config, &client).await;
-    let overall = probe::overall_severity(&lists);
-
-    if refresh_wan {
-        if let Some(info) = wan::fetch_wan(&client, &config.ip_providers).await {
-            *state.wan.lock().unwrap() = Some(info);
-        }
-    }
-    let wan = state.wan.lock().unwrap().clone();
-
-    let snapshot = Snapshot {
-        lists,
-        overall,
-        wan,
-    };
-
-    *state.snapshot.lock().unwrap() = Some(snapshot.clone());
-    let _ = app.emit(EVENT_STATUS, &snapshot);
-    // ponytail: set every cycle; no last-severity diffing — rebuild cost is negligible.
-    tray::update_icon(app, overall);
-    snapshot
-}
 
 /// Emit a synthetic snapshot with all services in `Checking` state and store it.
 /// Sync (no probing). Used to give instant visual feedback before a background probe resolves.
@@ -114,12 +85,19 @@ pub fn run() {
             // Snapshot the flags we need before moving `config` into the managed state.
             let hide_dock = config.hide_dock;
 
+            // Broadcast channel for the "probe now" signal. Capacity 1 is enough: a missed
+            // value just means a task was mid-probe, which is exactly when we don't need to wake it.
+            let (probe_now, _) = tokio::sync::broadcast::channel(1);
+
             app.manage(AppState {
                 config: Mutex::new(config),
                 config_path,
                 client,
                 snapshot: Mutex::new(None),
                 wan: Mutex::new(None),
+                probe_sem: std::sync::Arc::new(tokio::sync::Semaphore::new(probe::MAX_CONCURRENT)),
+                probe_now,
+                tasks: Mutex::new(Vec::new()),
             });
 
             // macOS only: suppress the Dock icon when the user opted into tray-only mode.
@@ -139,30 +117,13 @@ pub fn run() {
             tray::build_tray(app.handle())?;
 
             // Emit a checking snapshot immediately so the UI shows lists on first paint
-            // instead of the "Starting first probe…" placeholder.
+            // instead of the "Starting first probe…" placeholder. Seeds AppState.snapshot, which
+            // the Service probe tasks then fill in via deltas.
             emit_checking(app.handle());
 
-            // Background probe loop.
-            let handle = app.handle().clone();
-            tauri::async_runtime::spawn(async move {
-                let mut tick: u64 = 0;
-                loop {
-                    let interval = handle
-                        .state::<AppState>()
-                        .config
-                        .lock()
-                        .unwrap()
-                        .probe_interval_secs
-                        .max(5);
-
-                    // Refresh WAN on schedule, but also retry every cycle while still unknown.
-                    let wan_known = handle.state::<AppState>().wan.lock().unwrap().is_some();
-                    run_cycle(&handle, !wan_known || tick % WAN_REFRESH_EVERY == 0).await;
-
-                    tokio::time::sleep(Duration::from_secs(interval)).await;
-                    tick = tick.wrapping_add(1);
-                }
-            });
+            // Spawn one Service probe task per enabled Service, plus the WAN task.
+            scheduler::respawn_tasks(app.handle());
+            scheduler::spawn_wan_task(app.handle());
 
             Ok(())
         })
