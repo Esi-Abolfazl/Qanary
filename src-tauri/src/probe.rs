@@ -48,13 +48,16 @@ async fn probe_endpoint(
 ) -> (ServiceState, Option<u64>) {
     let timeout = Duration::from_millis(timeout_ms);
 
-    // 1. TCP connect (also does DNS). Measure how long it took.
+    // 1. TCP connect (also does DNS). Start the latency clock here so it covers
+    //    the full reachability cost (DNS + TCP + TLS + HTTP), not just the SYN/ACK.
     let started = Instant::now();
     let tcp_ok = matches!(
         tokio::time::timeout(timeout, TcpStream::connect((host, port))).await,
         Ok(Ok(_))
     );
-    let latency_ms = tcp_ok.then(|| started.elapsed().as_millis() as u64);
+    // TCP-connect-only time, used as the fallback latency for Blocked endpoints
+    // (where the HTTPS layer never answers, so a full-path number is meaningless).
+    let tcp_ms = started.elapsed().as_millis() as u64;
 
     if !tcp_ok {
         return (ServiceState::Down, None);
@@ -67,6 +70,14 @@ async fn probe_endpoint(
         format!("https://{host}:{port}/")
     };
     let http_ok = client.head(&url).send().await.is_ok();
+
+    // Up → full-path latency through the completed HEAD (TLS handshake included).
+    // Blocked → fall back to TCP-only time (the HEAD failed, so its elapsed is noise).
+    let latency_ms = Some(if http_ok {
+        started.elapsed().as_millis() as u64
+    } else {
+        tcp_ms
+    });
 
     (classify(tcp_ok, http_ok), latency_ms)
 }
