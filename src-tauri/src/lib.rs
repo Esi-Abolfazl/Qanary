@@ -152,6 +152,7 @@ pub fn run() {
             commands::reorder_services,
             commands::set_hide_dock,
             commands::take_new_changelog,
+            commands::get_changelog,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

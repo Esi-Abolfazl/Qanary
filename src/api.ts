@@ -70,12 +70,28 @@ export const updateSettings = (
 export const setHideDock = (enabled: boolean) =>
   invoke<Config>("set_hide_dock", { enabled });
 
+/** A single version's release notes. */
+export interface ChangelogEntry {
+  version: string;
+  body: string;
+  /** True for the trailing "your previous version" anchor card (only from takeNewChangelog). */
+  isPrevious?: boolean;
+}
+
 /**
- * On startup: returns this version's CHANGELOG notes once if the app version changed since
- * we last showed them (any update path), else null. Records the version so it shows only once.
+ * On startup: returns all CHANGELOG entries released since the user last saw notes
+ * (newest-first). Empty array when already up-to-date or on a fresh install (quiet).
+ * Records running version as last-seen so it fires only once per version.
  */
 export const takeNewChangelog = () =>
-  invoke<{ version: string; body: string } | null>("take_new_changelog");
+  invoke<ChangelogEntry[]>("take_new_changelog");
+
+/**
+ * Returns all CHANGELOG entries (newest-first) for the manual "Release notes"
+ * button in Settings. Does not touch last_changelog_version.
+ */
+export const getChangelog = () =>
+  invoke<ChangelogEntry[]>("get_changelog");
 
 /** Subscribe to live snapshot pushes. Returns a promise of the unlisten fn. */
 export const onStatusUpdate = (cb: (s: Snapshot) => void): Promise<UnlistenFn> =>

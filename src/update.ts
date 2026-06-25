@@ -13,7 +13,10 @@ export async function checkForUpdate(): Promise<UpdateInfo | null> {
   try {
     const update = await check();
     if (!update?.available) return null;
-    pending = update;
+    // Only replace the pending handle when the version actually changes; a same-version
+    // re-check (background interval) must not clobber a handle that has already been
+    // downloaded — installAndRelaunch() depends on it.
+    if (pending?.version !== update.version) pending = update;
     return { version: update.version, body: update.body ?? null };
   } catch (e) {
     if (String(e).toLowerCase().includes("your app is up to date")) return null;

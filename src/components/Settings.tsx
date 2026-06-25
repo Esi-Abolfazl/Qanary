@@ -81,6 +81,7 @@ export function Settings({
   open,
   onClose,
   onSave,
+  onShowReleaseNotes,
 }: {
   config: Config | null;
   open: boolean;
@@ -92,6 +93,7 @@ export function Settings({
     upNotify: boolean,
     upSound: boolean,
   ) => void;
+  onShowReleaseNotes: () => void;
 }) {
   const [slots, setSlots] = useState<ProviderSlot[]>(() => toSlots([]));
   const [downNotify, setDownNotify] = useState(true);
@@ -311,38 +313,44 @@ export function Settings({
         </form>
 
         <div className="update-section">
-          {updateState === "available" && updateInfo && (
-            <div className="update-banner">
-              <span>Update available: v{updateInfo.version}</span>
-              <button className="update-btn" onClick={handleInstall}>
-                Install &amp; restart
-              </button>
-            </div>
-          )}
-          <div className="update-row">
-            <span className="app-version">
-              Qanary{version && ` v${version}`}
-            </span>
-            <div className="update-row-right">
-              {updateState === "installing" && (
-                <span className="update-msg">Installing…</span>
-              )}
-              {updateState === "up-to-date" && (
-                <span className="update-msg">Up to date</span>
-              )}
-              {updateState === "error" && (
-                <span className="update-msg update-err">Check failed</span>
-              )}
+          <div className="update-meta">
+            <span className="app-version">Qanary{version && ` v${version}`}</span>
+            <button
+              type="button"
+              className="release-notes-link"
+              onClick={() => { onShowReleaseNotes(); onClose(); }}
+            >
+              Release notes
+            </button>
+          </div>
+
+          <div className="update-actions">
+            {updateState === "up-to-date" && (
+              <span className="update-msg">Up to date</span>
+            )}
+            {updateState === "error" && (
+              <span className="update-msg update-err">Check failed</span>
+            )}
+            {updateState === "installing" && (
+              <span className="update-msg">Installing…</span>
+            )}
+
+            {updateState === "available" && updateInfo ? (
+              <>
+                <span className="update-available-label">v{updateInfo.version} available</span>
+                <button className="update-install-btn" onClick={handleInstall}>
+                  Install &amp; restart
+                </button>
+              </>
+            ) : (
               <button
                 className="update-check-btn"
                 onClick={handleCheckUpdate}
-                disabled={
-                  updateState === "checking" || updateState === "installing"
-                }
+                disabled={updateState === "checking" || updateState === "installing"}
               >
                 {updateState === "checking" ? "Checking…" : "Check for updates"}
               </button>
-            </div>
+            )}
           </div>
         </div>
       </div>

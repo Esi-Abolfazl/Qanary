@@ -187,38 +187,112 @@ pub fn update_settings(
 }
 
 /// Release notes for the modal: the CHANGELOG section plus the version it belongs to.
-#[derive(Serialize)]
+#[derive(Debug, Serialize)]
 pub struct ChangelogPayload {
     pub version: String,
     pub body: String,
+    /// True only for the trailing anchor card = the version the user was on before this update.
+    /// The modal shows it collapsed with a "Your previous version" marker so everything above
+    /// it reads as "new since your version". Always false from `get_changelog`.
+    #[serde(rename = "isPrevious")]
+    pub is_previous: bool,
 }
 
-/// Called once on startup. If the running version differs from the last one we showed notes
-/// for, return that version's CHANGELOG section (and record it so it shows only once). Returns
-/// None when already shown for this version, or when the version has no CHANGELOG section.
-/// A missing `last_changelog_version` (fresh install or upgrade from a pre-mechanism build)
-/// counts as "changed", so the modal shows. Works for any update path (in-app or manual).
+/// Parse every `## [version]` block in the changelog (newest-first), apply `modal_notes`
+/// to strip dev-only subsections, and return entries with non-empty bodies.
+fn changelog_entries(changelog: &str) -> Vec<ChangelogPayload> {
+    // Collect the starting line index of each `## [version]` heading.
+    let lines: Vec<&str> = changelog.lines().collect();
+    let mut starts: Vec<usize> = Vec::new();
+    for (i, line) in lines.iter().enumerate() {
+        if line.starts_with("## [") {
+            starts.push(i);
+        }
+    }
+    let mut entries = Vec::new();
+    for (idx, &start) in starts.iter().enumerate() {
+        // Extract the version from the heading: `## [1.2.3]` or `## [1.2.3] - date`.
+        let heading = lines[start];
+        let version = heading
+            .strip_prefix("## [")
+            .and_then(|s| s.split(']').next())
+            .unwrap_or("")
+            .to_string();
+        if version.is_empty() {
+            continue;
+        }
+        // Body = lines between this heading and the next `## [` heading (exclusive).
+        let end = starts.get(idx + 1).copied().unwrap_or(lines.len());
+        let body_raw = lines[start + 1..end].join("\n").trim_matches('\n').to_string();
+        let body = modal_notes(&body_raw);
+        if !body.trim().is_empty() {
+            entries.push(ChangelogPayload { version, body, is_previous: false });
+        }
+    }
+    entries
+}
+
+/// From all entries (newest-first), return everything released since `last` (the user's previous
+/// version) plus the `last` entry itself as a trailing anchor flagged `is_previous`. When `last`
+/// is absent from the list (older than the oldest entry, or its notes were filtered out), returns
+/// all entries with no anchor.
+fn entries_since(all: Vec<ChangelogPayload>, last: &str) -> Vec<ChangelogPayload> {
+    let mut out = Vec::new();
+    for mut e in all {
+        if e.version == last {
+            e.is_previous = true;
+            out.push(e);
+            break;
+        }
+        out.push(e);
+    }
+    out
+}
+
+/// Called once on startup. Returns the CHANGELOG entries released since the user last saw
+/// notes (i.e. everything above `last_changelog_version` in the file, newest-first). Returns
+/// an empty list when:
+///   - already shown for this version (short-circuit, no re-save), or
+///   - fresh install / `last_changelog_version` not found in CHANGELOG (quiet first launch).
+///
+/// Records the running version as last-seen so the modal shows only once per version.
 #[tauri::command]
-pub fn take_new_changelog(app: AppHandle) -> Option<ChangelogPayload> {
+pub fn take_new_changelog(app: AppHandle) -> Vec<ChangelogPayload> {
     let running = app.package_info().version.to_string();
     let state = app.state::<AppState>();
 
-    let to_save = {
+    let last_seen = {
         let mut cfg = state.config.lock().unwrap();
         if cfg.last_changelog_version.as_deref() == Some(running.as_str()) {
-            return None; // already shown for this version
+            return Vec::new(); // already shown for this version
         }
+        let prev = cfg.last_changelog_version.clone();
         cfg.last_changelog_version = Some(running.clone());
-        cfg.clone()
+        prev
     };
+    // Persist the new last-seen version.
+    let to_save = state.config.lock().unwrap().clone();
     if let Err(err) = crate::store::save(&state.config_path, &to_save) {
         eprintln!("qanary: failed to save last_changelog_version: {err}");
     }
 
-    changelog_section(CHANGELOG, &running)
-        .map(|body| modal_notes(&body))
-        .filter(|body| !body.trim().is_empty())
-        .map(|body| ChangelogPayload { version: running, body })
+    let all = changelog_entries(CHANGELOG);
+
+    // Fresh install or last-seen version absent from file → quiet (no auto-modal).
+    // The user can always open the full changelog from Settings.
+    let last = match last_seen {
+        None => return Vec::new(),
+        Some(v) => v,
+    };
+    // Entries newer than last_seen, plus last_seen itself as the "your previous version" anchor.
+    entries_since(all, &last)
+}
+
+/// Returns all CHANGELOG entries, newest-first, for the manual "Release notes" button in
+/// Settings. Does not touch `last_changelog_version`.
+#[tauri::command]
+pub fn get_changelog(_app: AppHandle) -> Vec<ChangelogPayload> {
+    changelog_entries(CHANGELOG)
 }
 
 /// Subsection headings that are dev-log only — added to CHANGELOG.md for the GitHub release
@@ -250,27 +324,23 @@ fn modal_notes(section: &str) -> String {
     out.join("\n").trim_matches('\n').to_string()
 }
 
-/// Extract the notes under `## [version]` up to the next `## [` version heading, trimmed of
-/// surrounding blank lines. Mirrors the awk extractor in .github/workflows/release.yml so the
-/// in-app modal and the GitHub release body stay identical. None if the section is absent/empty.
-fn changelog_section(changelog: &str, version: &str) -> Option<String> {
-    let header = format!("## [{version}]");
-    let mut lines = changelog.lines();
-    lines.by_ref().find(|l| l.trim_end() == header)?;
-    let body: Vec<&str> = lines.take_while(|l| !l.starts_with("## [")).collect();
-    let body = body.join("\n").trim_matches('\n').to_string();
-    if body.trim().is_empty() {
-        None
-    } else {
-        Some(body)
-    }
-}
-
 #[cfg(test)]
 mod changelog_tests {
-    use super::{changelog_section, modal_notes};
+    use super::{changelog_entries, entries_since, modal_notes};
+
+    /// Extract one `## [version]` block — kept here for the existing targeted tests.
+    fn changelog_section(changelog: &str, version: &str) -> Option<String> {
+        let header = format!("## [{version}]");
+        let mut lines = changelog.lines();
+        lines.by_ref().find(|l| l.trim_end() == header)?;
+        let body: Vec<&str> = lines.take_while(|l| !l.starts_with("## [")).collect();
+        let body = body.join("\n").trim_matches('\n').to_string();
+        if body.trim().is_empty() { None } else { Some(body) }
+    }
 
     const SAMPLE: &str = "# Changelog\n\n## [0.4.5]\n\n## What's new\n- a\n- b\n\n## Fix\n- c\n\n## [0.4.0]\n- old\n";
+
+    // ── changelog_section (kept for compatibility; still used in dev) ──────────────────
 
     #[test]
     fn extracts_section_until_next_version_heading() {
@@ -285,6 +355,8 @@ mod changelog_tests {
         assert!(changelog_section(SAMPLE, "9.9.9").is_none());
     }
 
+    // ── modal_notes ───────────────────────────────────────────────────────────────────
+
     #[test]
     fn modal_notes_drops_dev_sections_and_footer() {
         let section = "## What's new\n- a\n\n## Internal\n- test harness\n\n## More info\n- [ADR](url)";
@@ -296,6 +368,70 @@ mod changelog_tests {
     fn modal_notes_keeps_user_sections() {
         let section = "## What's new\n- a\n\n## Fix\n- c";
         assert_eq!(modal_notes(section), section, "keeps non-dev headings");
+    }
+
+    // ── changelog_entries (multi-version) ────────────────────────────────────────────
+
+    const MULTI: &str = "\
+# Changelog
+
+## [0.5.0]
+
+## What's new
+- feature x
+
+## [0.4.5]
+
+## What's new
+- a
+- b
+
+## Fix
+- c
+
+## Internal
+- dev stuff
+
+## [0.4.0]
+- old note
+";
+
+    #[test]
+    fn collects_all_entries_newest_first() {
+        let entries = changelog_entries(MULTI);
+        assert_eq!(entries.len(), 3, "three version blocks: {entries:?}");
+        assert_eq!(entries[0].version, "0.5.0");
+        assert_eq!(entries[1].version, "0.4.5");
+        assert_eq!(entries[2].version, "0.4.0");
+    }
+
+    #[test]
+    fn entries_strip_dev_only_subsections() {
+        let entries = changelog_entries(MULTI);
+        let v045 = entries.iter().find(|e| e.version == "0.4.5").unwrap();
+        assert!(!v045.body.contains("dev stuff"), "Internal section stripped: {:?}", v045.body);
+        assert!(v045.body.contains("- a"), "user content kept");
+    }
+
+    #[test]
+    fn entries_since_returns_newer_plus_previous_anchor() {
+        let all = changelog_entries(MULTI);
+        let since = entries_since(all, "0.4.5");
+        // 0.5.0 (new) + 0.4.5 (the previous-version anchor), 0.4.0 dropped.
+        assert_eq!(since.len(), 2);
+        assert_eq!(since[0].version, "0.5.0");
+        assert!(!since[0].is_previous);
+        assert_eq!(since[1].version, "0.4.5");
+        assert!(since[1].is_previous, "last-seen entry flagged as previous");
+    }
+
+    #[test]
+    fn entries_since_absent_yields_all_no_anchor() {
+        // last_seen not in file → all entries returned, none flagged previous.
+        let all = changelog_entries(MULTI);
+        let since = entries_since(all, "9.9.9");
+        assert_eq!(since.len(), 3, "no entries dropped when version absent");
+        assert!(since.iter().all(|e| !e.is_previous), "no anchor when absent");
     }
 }
 

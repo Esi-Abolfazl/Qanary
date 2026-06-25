@@ -10,6 +10,7 @@ vi.mock("./api", () => ({
   onStatusUpdate: vi.fn(),
   onServiceUpdate: vi.fn(),
   takeNewChangelog: vi.fn(),
+  getChangelog: vi.fn(),
   addServices: vi.fn(),
   updateService: vi.fn(),
   removeService: vi.fn(),
@@ -74,7 +75,8 @@ const CONFIG: Config = {
 beforeEach(() => {
   vi.mocked(api.getSnapshot).mockResolvedValue(SNAPSHOT);
   vi.mocked(api.getConfig).mockResolvedValue(CONFIG);
-  vi.mocked(api.takeNewChangelog).mockResolvedValue(null);
+  vi.mocked(api.takeNewChangelog).mockResolvedValue([]);
+  vi.mocked(api.getChangelog).mockResolvedValue([]);
   vi.mocked(api.onStatusUpdate).mockResolvedValue(() => {});
   vi.mocked(api.onServiceUpdate).mockResolvedValue(() => {});
   vi.mocked(api.refreshNow).mockResolvedValue(SNAPSHOT);

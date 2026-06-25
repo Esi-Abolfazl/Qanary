@@ -1,5 +1,7 @@
-import { Fragment, type ReactNode } from "react";
+import { Fragment, useState, type ReactNode } from "react";
+import type { ChangelogEntry } from "../api";
 import { openUrl } from "@tauri-apps/plugin-opener";
+import { Icon } from "./Icon";
 
 /**
  * Render the small Markdown subset our CHANGELOG uses: `###` headings, `-`/`*` lists,
@@ -100,22 +102,58 @@ function renderMarkdown(body: string): ReactNode[] {
   return blocks;
 }
 
-/** Shows the release notes for a just-installed update, once per version. */
+function VersionCard({
+  entry,
+  open,
+  onToggle,
+}: {
+  entry: ChangelogEntry;
+  open: boolean;
+  onToggle: () => void;
+}) {
+  return (
+    <div className="cl-version">
+      <button className={`cl-version-head${open ? " cl-version-head--open" : ""}`} onClick={onToggle}>
+        <span className="cl-version-name">v{entry.version}</span>
+        <span className="cl-version-head-right">
+          {entry.isPrevious && <span className="cl-version-prev">Your previous version</span>}
+          <Icon name={open ? "chevronUp" : "chevronDown"} size={16} />
+        </span>
+      </button>
+      {open && (
+        <div className="cl-version-body">
+          {entry.body.trim()
+            ? renderMarkdown(entry.body)
+            : <p className="cl-p">No release notes provided.</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Shows release notes for one or more versions. Newest entry is open; older ones collapsed. */
 export function ChangelogModal({
-  version,
-  body,
+  entries,
   onClose,
 }: {
-  version: string;
-  body: string;
+  entries: ChangelogEntry[];
   onClose: () => void;
 }) {
+  // Single-open accordion: newest entry open by default; opening one closes the rest.
+  const [openVersion, setOpenVersion] = useState<string | null>(entries[0]?.version ?? null);
   return (
     <div className="modal-overlay" onClick={onClose}>
       <div className="modal modal-changelog" onClick={(e) => e.stopPropagation()}>
-        <h3 className="modal-title">Qanary v{version}</h3>
+        <h3 className="modal-title">What's new</h3>
         <div className="changelog-body">
-          {body.trim() ? renderMarkdown(body) : <p className="cl-p">No release notes provided.</p>}
+          {entries.map((entry) => (
+            <VersionCard
+              key={entry.version}
+              entry={entry}
+              open={openVersion === entry.version}
+              onToggle={() => setOpenVersion((v) => (v === entry.version ? null : entry.version))}
+            />
+          ))}
         </div>
         <div className="modal-actions">
           <button className="modal-save" onClick={onClose}>

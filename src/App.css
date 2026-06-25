@@ -723,39 +723,103 @@ body {
 .modal-changelog {
   max-width: 480px;
 }
+
+/* Scrollable stack of version cards */
 .changelog-body {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   font-size: 13px;
   line-height: 1.55;
-  max-height: 360px;
+  max-height: 400px;
   overflow-y: auto;
   word-break: break-word;
   margin: 0 0 16px;
   color: var(--text);
 }
-.changelog-body .cl-h {
-  font-size: 12px;
+
+/* Version card — same card shape as .list */
+.cl-version {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: var(--r-md);
+  overflow: hidden;
+  /* Keep natural height so .changelog-body scrolls instead of squashing cards. */
+  flex-shrink: 0;
+}
+
+/* Header row — mirrors .list-head */
+.cl-version-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  padding: 10px 12px;
+  background: none;
+  border: none;
+  border-bottom: 1px solid transparent;
+  cursor: pointer;
+  text-align: left;
+  color: var(--text);
+  transition: background 0.12s;
+}
+.cl-version-head:hover {
+  background: var(--panel-2);
+}
+.cl-version-head--open {
+  border-bottom-color: var(--border);
+}
+.cl-version-name {
+  font-size: var(--text-md);
+  font-weight: 600;
+}
+.cl-version-head-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+/* "Your previous version" anchor marker beside the chevron. */
+.cl-version-prev {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--muted);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+
+/* Notes body */
+.cl-version-body {
+  padding: 12px 14px;
+}
+.cl-version-body .cl-h {
+  font-size: 11px;
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.3px;
   color: var(--muted);
-  margin: 16px 0 8px;
-  padding-bottom: 6px;
+  margin: 14px 0 6px;
+  padding-bottom: 4px;
   border-bottom: 1px solid var(--border);
 }
-.changelog-body .cl-h:first-child {
+.cl-version-body .cl-h:first-child {
   margin-top: 0;
 }
-.changelog-body .cl-p {
-  margin: 0 0 8px;
+.cl-version-body .cl-p {
+  margin: 0 0 6px;
 }
-.changelog-body .cl-ul {
-  margin: 0 0 8px;
+.cl-version-body .cl-ul {
+  margin: 0 0 6px;
   padding-left: 18px;
 }
-.changelog-body .cl-ul li {
+.cl-version-body .cl-ul li {
   margin: 2px 0;
 }
-.changelog-body .cl-quote {
+.cl-version-body .cl-quote {
   margin: 8px 0;
   padding: 6px 10px;
   border-left: 3px solid var(--brand);
@@ -763,24 +827,24 @@ body {
   border-radius: 0 var(--r-sm) var(--r-sm) 0;
   color: var(--muted);
 }
-.changelog-body code {
+.cl-version-body code {
   font-family: var(--font-mono, ui-monospace, monospace);
   font-size: 0.9em;
   padding: 1px 5px;
   border-radius: 4px;
   background: var(--bg-inset);
 }
-.changelog-body strong {
+.cl-version-body strong {
   font-weight: 700;
   color: var(--text-strong);
 }
-.changelog-body .cl-link {
+.cl-version-body .cl-link {
   color: var(--brand);
   text-decoration: underline;
   cursor: pointer;
 }
-.changelog-body .cl-hr {
-  margin: 14px 0;
+.cl-version-body .cl-hr {
+  margin: 10px 0;
   border: 0;
   border-top: 1px solid var(--border);
 }
@@ -1056,76 +1120,68 @@ body {
   justify-self: start;
 }
 
-.update-section {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  border-top: 1px solid var(--border);
-  padding-top: 18px;
-  margin-top: 20px;
-}
+/* ---------- Update section (Settings footer) ---------- */
 
-/* Version on the left, status + check button on the right. */
-.update-row {
+.update-section {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+  margin-top: 20px;
 }
-.update-row-right {
+
+/* Left: version + release-notes link stacked */
+.update-meta {
   display: flex;
-  align-items: center;
-  gap: 10px;
+  flex-direction: column;
+  gap: 3px;
 }
 .app-version {
   font-size: 12px;
   color: var(--muted);
   font-variant-numeric: tabular-nums;
 }
-
-/* ---------- Update UI ---------- */
-
-.update-banner {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  background: var(--panel-2);
-  border-bottom: 1px solid var(--brand);
-  font-size: 13px;
-  color: var(--text);
-}
-
-.update-btn {
-  background: var(--brand);
+.release-notes-link {
+  background: none;
   border: none;
-  color: var(--brand-ink);
-  border-radius: var(--r-sm);
-  padding: 3px 10px;
-  font-size: 10px;
-  font-weight: 700;
+  padding: 0;
+  font-size: 11px;
+  color: var(--muted);
   cursor: pointer;
+  text-align: left;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  text-decoration-color: transparent;
+  transition: color 0.15s, text-decoration-color 0.15s;
 }
-.update-btn:hover {
-  background: var(--brand-press);
+.release-notes-link:hover {
+  color: var(--text);
+  text-decoration-color: var(--border);
 }
 
-.update-footer {
+/* Right: status message + action button in a row */
+.update-actions {
   display: flex;
   align-items: center;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 8px 12px;
-  border-top: 1px solid var(--border);
-  background: var(--panel);
+  gap: 10px;
+  flex-shrink: 0;
 }
 
 .update-msg {
   font-size: 12px;
   color: var(--muted);
+  white-space: nowrap;
 }
 .update-err {
   color: var(--red);
+}
+.update-available-label {
+  font-size: 12px;
+  color: var(--brand);
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .update-check-btn {
@@ -1133,10 +1189,11 @@ body {
   border: 1px solid var(--border);
   color: var(--muted);
   border-radius: var(--r-sm);
-  padding: 7px 12px;
-  font-size: 13px;
+  padding: 6px 12px;
+  font-size: 12px;
   cursor: pointer;
   white-space: nowrap;
+  transition: color 0.15s, border-color 0.15s;
 }
 .update-check-btn:hover:not(:disabled) {
   color: var(--text);
@@ -1145,6 +1202,22 @@ body {
 .update-check-btn:disabled {
   opacity: 0.5;
   cursor: default;
+}
+
+.update-install-btn {
+  background: var(--brand);
+  border: none;
+  color: var(--brand-ink);
+  border-radius: var(--r-sm);
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s;
+}
+.update-install-btn:hover {
+  background: var(--brand-press);
 }
 
 /* ---------- Busy / loading states ---------- */

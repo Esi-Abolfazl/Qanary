@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import "./App.css";
 import * as api from "./api";
+import type { ChangelogEntry } from "./api";
 import type { Config, ListStatus, ServiceDraft, Snapshot } from "./types";
 import { StatusHero } from "./components/StatusHero";
 import { ServiceList } from "./components/ServiceList";
@@ -10,6 +11,7 @@ import { ServiceModal } from "./components/ServiceModal";
 import { ChangelogModal } from "./components/ChangelogModal";
 import { serviceToText } from "./utils/parseServices";
 import { checkForUpdate, downloadUpdate, installAndRelaunch } from "./update";
+import { nextUpdatePhase } from "./utils/updateCheck";
 import { criticalTransitions } from "./utils/transitions";
 import { fireAlert, type Dir } from "./utils/alerts";
 import { mergeDelta } from "./utils/mergeDelta";
@@ -28,6 +30,9 @@ import { CSS } from "@dnd-kit/utilities";
 // Collect Transitions for this long before firing, so several lists dropping at
 // once produce a single batched notification instead of one each.
 const ALERT_WINDOW_MS = 2500;
+
+// Re-check for updates every 6 hours in the background (long-running machines / sleep wakeup).
+const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000;
 
 type ModalState =
   | null
@@ -82,8 +87,8 @@ function App() {
   const [updatePhase, setUpdatePhase] = useState<UpdatePhase | null>(null);
   const [downloadProgress, setDownloadProgress] = useState(0);
   const [reorderMode, setReorderMode] = useState(false);
-  // Changelog shown once after a self-update relaunch.
-  const [changelog, setChangelog] = useState<{ version: string; body: string } | null>(null);
+  // Changelog shown once after a self-update (auto) or on demand via Settings button.
+  const [changelog, setChangelog] = useState<ChangelogEntry[] | null>(null);
   // Holds the previous snapshot so we can diff for Transitions on each update.
   const prevSnapshotRef = useRef<Snapshot | null>(null);
 
@@ -93,6 +98,17 @@ function App() {
   useEffect(() => {
     configRef.current = config;
   }, [config]);
+
+  // Mirrors for the update state — readable inside interval/event callbacks without
+  // stale-closure issues (same pattern as configRef above).
+  const updatePhaseRef = useRef<UpdatePhase | null>(null);
+  const availableVersionRef = useRef<string | null>(null);
+  useEffect(() => {
+    updatePhaseRef.current = updatePhase;
+  }, [updatePhase]);
+
+  // Timestamp of the last completed update check (ms). 0 = never checked.
+  const lastCheckRef = useRef<number>(0);
 
   // Batching: pending Transitions keyed by list id (latest edge wins), plus the
   // open window timer. Flushed once per ALERT_WINDOW_MS into per-direction alerts.
@@ -134,12 +150,32 @@ function App() {
     setSnapshot(s);
   }
 
+  // Centralised update check — safe to call from startup, interval, or visibility event.
+  // Skips while a download is in progress (next interval will catch it instead).
+  async function runUpdateCheck() {
+    if (updatePhaseRef.current === "downloading") return;
+    lastCheckRef.current = Date.now();
+    try {
+      const info = await checkForUpdate();
+      const next = nextUpdatePhase(
+        { phase: updatePhaseRef.current, version: availableVersionRef.current },
+        info,
+      );
+      if (next.phase !== updatePhaseRef.current) setUpdatePhase(next.phase);
+      availableVersionRef.current = next.version;
+    } catch {
+      // Silently ignore — failed background check is non-fatal.
+    }
+  }
+
   useEffect(() => {
     api.getSnapshot().then((s) => s && handleSnapshot(s));
     api.getConfig().then(setConfig);
     // Show the "What's new" changelog once when the app version changed since last launch.
     // Backend reads the bundled CHANGELOG, so this fires for any update path (in-app or manual).
-    api.takeNewChangelog().then((cl) => cl && setChangelog(cl));
+    api.takeNewChangelog().then((entries) => {
+      if (entries.length > 0) setChangelog(entries);
+    });
     // status-update = full snapshot (WAN refresh + initial). service-update = per-Service delta,
     // merged onto the latest snapshot before running the same transition/alert diff.
     let unlistenStatus: (() => void) | undefined;
@@ -154,15 +190,25 @@ function App() {
     }).then((fn) => {
       unlistenService = fn;
     });
-    checkForUpdate()
-      .then((info) => {
-        if (info) setUpdatePhase("available");
-      })
-      .catch(() => {});
+    // Startup check
+    void runUpdateCheck();
+    // Background interval: re-check every 6 h so long-running machines stay current.
+    const intervalId = window.setInterval(runUpdateCheck, UPDATE_CHECK_MS);
+    // Visibility re-check: webview timers throttle during laptop sleep; fire on focus
+    // if at least one interval period has elapsed since the last check.
+    function handleVisibilityChange() {
+      if (document.visibilityState === "visible" &&
+          Date.now() - lastCheckRef.current >= UPDATE_CHECK_MS) {
+        void runUpdateCheck();
+      }
+    }
+    document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => {
       unlistenStatus?.();
       unlistenService?.();
       if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+      window.clearInterval(intervalId);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);
 
@@ -353,8 +399,7 @@ function App() {
 
       {changelog && (
         <ChangelogModal
-          version={changelog.version}
-          body={changelog.body}
+          entries={changelog}
           onClose={() => setChangelog(null)}
         />
       )}
@@ -375,6 +420,11 @@ function App() {
               upSound,
             )
             .then(setConfig)
+        }
+        onShowReleaseNotes={() =>
+          api.getChangelog().then((entries) => {
+            if (entries.length > 0) setChangelog(entries);
+          })
         }
       />
     </main>

@@ -55,6 +55,19 @@ new status plus its List's recomputed `all_down` and the new overall Severity. T
 merges a delta into its local Snapshot. Distinct from the full Snapshot push.
 _Avoid_: update, patch, event (bare)
 
+**Self-update check**:
+Querying the GitHub release endpoint (via the Tauri updater) for a newer app **binary**
+version — distinct from a Service probe, which checks reachability. Runs at startup, on the
+manual Settings button, and on a background interval. Always returns the *latest* available
+version, so a re-check supersedes any older pending version.
+_Avoid_: update (bare — reserved for Status delta), refresh (refresh = re-probe Services)
+
+**Changelog entry**:
+One `## [version]` section of CHANGELOG.md (dev-only subsections stripped for the modal).
+The "What's new" modal shows a *list* of entries — every version released since the user
+last saw notes — newest expanded, older collapsed.
+_Avoid_: release note (bare), section
+
 **Effective interval**:
 The actual sleep a Service probe task waits before its next probe, derived from the
 configured `probe_interval_secs` with backoff (longer while the Service keeps failing) and
