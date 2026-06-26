@@ -8,6 +8,20 @@ heading) become that release's notes. Dev-log-only subsections (`## Internal`, `
 `## Development`, `## Chore`, `## CI`, `## Build`, `## More info`) appear on the GitHub
 release page but are hidden from the in-app "What's new" modal.
 
+## [0.5.2]
+
+## What's new
+
+- Probe interval by list criticality — critical lists refresh every 30s and non-critical lists every 60s by default (minimum 10s), both adjustable in Settings.
+
+## Fix
+
+- Automatic update checks — Qanary re-checks for a new version every 6 hours.
+
+## More info
+
+- [ADR 0015 — background interval self-update check](https://github.com/Esi-Abolfazl/Qanary/blob/main/docs/adr/0015-background-interval-visibility-self-update-check.md), [ADR 0017 — list-criticality probe intervals](https://github.com/Esi-Abolfazl/Qanary/blob/main/docs/adr/0017-list-criticality-probe-intervals.md).
+
 ## [0.5.0]
 
 ## What's new

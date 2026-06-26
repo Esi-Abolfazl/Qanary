@@ -67,7 +67,8 @@ describe("buildMessage", () => {
 describe("fireAlert", () => {
   const baseConfig: Config = {
     lists: [],
-    probe_interval_secs: 30,
+    critical_interval_secs: 20,
+    noncritical_interval_secs: 60,
     timeout_ms: 5000,
     ip_providers: [],
     down_notify: true,

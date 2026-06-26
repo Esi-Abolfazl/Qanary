@@ -67,7 +67,8 @@ mod tests {
         let loaded = load(&path);
 
         assert_eq!(loaded.lists.len(), original.lists.len());
-        assert_eq!(loaded.probe_interval_secs, original.probe_interval_secs);
+        assert_eq!(loaded.critical_interval_secs, original.critical_interval_secs);
+        assert_eq!(loaded.noncritical_interval_secs, original.noncritical_interval_secs);
         assert_eq!(loaded.lists[0].services.len(), original.lists[0].services.len());
         // Every service must survive round-trip with at least one endpoint.
         for svc in &loaded.lists[0].services {

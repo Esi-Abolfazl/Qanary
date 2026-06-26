@@ -122,8 +122,13 @@ impl ServiceList {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     pub lists: Vec<ServiceList>,
-    #[serde(default = "default_interval")]
-    pub probe_interval_secs: u64,
+    /// Probe cadence for **critical** lists, in seconds. Floored at the scheduler's
+    /// MIN_INTERVAL_SECS. Default 30.
+    #[serde(default = "default_critical_interval")]
+    pub critical_interval_secs: u64,
+    /// Probe cadence for **non-critical** lists, in seconds. Default 60.
+    #[serde(default = "default_noncritical_interval")]
+    pub noncritical_interval_secs: u64,
     #[serde(default = "default_timeout")]
     pub timeout_ms: u64,
     /// Ordered list of HTTPS plain-text IP providers tried in sequence.
@@ -152,8 +157,11 @@ pub struct Config {
     pub last_changelog_version: Option<String>,
 }
 
-fn default_interval() -> u64 {
+fn default_critical_interval() -> u64 {
     30
+}
+fn default_noncritical_interval() -> u64 {
+    60
 }
 fn default_timeout() -> u64 {
     3000
@@ -218,7 +226,8 @@ impl Default for Config {
         global.critical = true;
         Config {
             lists: vec![global, iran],
-            probe_interval_secs: default_interval(),
+            critical_interval_secs: default_critical_interval(),
+            noncritical_interval_secs: default_noncritical_interval(),
             timeout_ms: default_timeout(),
             ip_providers: default_ip_providers(),
             down_notify: true,

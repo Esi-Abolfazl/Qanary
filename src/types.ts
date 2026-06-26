@@ -82,7 +82,8 @@ export interface ServiceList {
 
 export interface Config {
   lists: ServiceList[];
-  probe_interval_secs: number;
+  critical_interval_secs: number;
+  noncritical_interval_secs: number;
   timeout_ms: number;
   ip_providers: string[];
   down_notify: boolean;

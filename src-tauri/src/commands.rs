@@ -146,7 +146,8 @@ pub fn remove_list(app: AppHandle, list_id: String) -> Config {
 #[tauri::command]
 pub fn update_settings(
     app: AppHandle,
-    probe_interval_secs: Option<u64>,
+    critical_interval_secs: Option<u64>,
+    noncritical_interval_secs: Option<u64>,
     timeout_ms: Option<u64>,
     ip_providers: Option<Vec<String>>,
     down_notify: Option<bool>,
@@ -155,8 +156,11 @@ pub fn update_settings(
     up_sound: Option<bool>,
 ) -> Config {
     mutate(&app, |cfg| {
-        if let Some(v) = probe_interval_secs {
-            cfg.probe_interval_secs = v.max(5); // floor to avoid hammering the network
+        if let Some(v) = critical_interval_secs {
+            cfg.critical_interval_secs = v.max(10); // floor to avoid hammering the network
+        }
+        if let Some(v) = noncritical_interval_secs {
+            cfg.noncritical_interval_secs = v.max(10);
         }
         if let Some(v) = timeout_ms {
             cfg.timeout_ms = v;

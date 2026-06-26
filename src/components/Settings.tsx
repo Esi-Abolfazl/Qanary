@@ -87,6 +87,8 @@ export function Settings({
   open: boolean;
   onClose: () => void;
   onSave: (
+    criticalInterval: number,
+    noncriticalInterval: number,
     providers: string[],
     downNotify: boolean,
     downSound: boolean,
@@ -96,6 +98,9 @@ export function Settings({
   onShowReleaseNotes: () => void;
 }) {
   const [slots, setSlots] = useState<ProviderSlot[]>(() => toSlots([]));
+  // Probe intervals held as strings while editing; parsed + floored (≥10) on Save.
+  const [criticalInterval, setCriticalInterval] = useState("30");
+  const [noncriticalInterval, setNoncriticalInterval] = useState("60");
   const [downNotify, setDownNotify] = useState(true);
   const [downSound, setDownSound] = useState(true);
   const [upNotify, setUpNotify] = useState(false);
@@ -120,6 +125,8 @@ export function Settings({
   useEffect(() => {
     if (!open || !config) return;
     setSlots(toSlots(config.ip_providers));
+    setCriticalInterval(String(config.critical_interval_secs));
+    setNoncriticalInterval(String(config.noncritical_interval_secs));
     setDownNotify(config.down_notify);
     setDownSound(config.down_sound);
     setUpNotify(config.up_notify);
@@ -178,7 +185,20 @@ export function Settings({
     setLoginInitial(loginEnabled); // applied state is the new baseline
 
     const providers = slots.map((s) => parseHost(s.value)).filter(Boolean);
-    onSave(providers, downNotify, downSound, upNotify, upSound);
+    // Floor each interval at 10s; fall back to the default if left blank/invalid.
+    const floorInterval = (raw: string, fallback: number) => {
+      const n = Math.floor(Number(raw));
+      return Number.isFinite(n) && n > 0 ? Math.max(n, 10) : fallback;
+    };
+    onSave(
+      floorInterval(criticalInterval, 30),
+      floorInterval(noncriticalInterval, 60),
+      providers,
+      downNotify,
+      downSound,
+      upNotify,
+      upSound,
+    );
     onClose();
   }
 
@@ -232,6 +252,40 @@ export function Settings({
                 ))}
               </SortableContext>
             </DndContext>
+          </fieldset>
+
+          <fieldset className="settings-card">
+            <legend className="settings-card-title">Probe interval (seconds, min 10)</legend>
+            <div className="interval-row">
+              <label className="interval-label" htmlFor="critical-interval">
+                Critical lists
+              </label>
+              <input
+                id="critical-interval"
+                type="number"
+                min={10}
+                step={1}
+                value={criticalInterval}
+                onChange={(e) => setCriticalInterval(e.target.value)}
+              />
+            </div>
+            <div className="interval-row">
+              <label className="interval-label" htmlFor="noncritical-interval">
+                Non-critical lists
+              </label>
+              <input
+                id="noncritical-interval"
+                type="number"
+                min={10}
+                step={1}
+                value={noncriticalInterval}
+                onChange={(e) => setNoncriticalInterval(e.target.value)}
+              />
+            </div>
+            <p className="settings-note">
+              Probing too often can look like abuse — some services may rate-limit or
+              block you. Keep intervals as high as your needs allow.
+            </p>
           </fieldset>
 
           <fieldset className="settings-card">

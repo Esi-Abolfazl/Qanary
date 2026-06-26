@@ -48,7 +48,8 @@ export const reorderServices = (listId: string, orderedIds: string[]) =>
   invoke<Config>("reorder_services", { listId, orderedIds });
 
 export const updateSettings = (
-  probeIntervalSecs?: number,
+  criticalIntervalSecs?: number,
+  noncriticalIntervalSecs?: number,
   timeoutMs?: number,
   ipProviders?: string[],
   downNotify?: boolean,
@@ -57,7 +58,8 @@ export const updateSettings = (
   upSound?: boolean,
 ) =>
   invoke<Config>("update_settings", {
-    probeIntervalSecs: probeIntervalSecs ?? null,
+    criticalIntervalSecs: criticalIntervalSecs ?? null,
+    noncriticalIntervalSecs: noncriticalIntervalSecs ?? null,
     timeoutMs: timeoutMs ?? null,
     ipProviders: ipProviders ?? null,
     downNotify: downNotify ?? null,

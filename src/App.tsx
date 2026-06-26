@@ -408,10 +408,11 @@ function App() {
         config={config}
         open={modal?.kind === "settings"}
         onClose={() => setModal(null)}
-        onSave={(providers, downNotify, downSound, upNotify, upSound) =>
+        onSave={(criticalInterval, noncriticalInterval, providers, downNotify, downSound, upNotify, upSound) =>
           api
             .updateSettings(
-              undefined,
+              criticalInterval,
+              noncriticalInterval,
               undefined,
               providers,
               downNotify,

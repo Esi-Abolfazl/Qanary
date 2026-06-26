@@ -13,7 +13,7 @@
 - [x] Hide-in-dock option (macOS)
 - [x] Add to system startup (launch on login)
 - [x] Drag & drop reordering for lists, services, and IP provider (change their place/order)
-- [ ] Per-service probe interval override
+- [x] Probe interval by list criticality (critical 30s / non-critical 60s defaults, min 10s, editable from Settings) — reframed from "per-service override" (ADR-0017)
 - [ ] Network-change-triggered refresh: probe immediately when system network state changes (wifi on/off, ethernet plug, VPN up/down) instead of only on the interval timer. Use interface-change watching (`if-watch`: route socket on macOS, netlink on Linux, `NotifyIpInterfaceChange` on Windows) for wifi/ethernet/tunnel-interface VPNs. Additionally watch the route table (macOS `SCDynamicStore`/`PF_ROUTE`) to catch split-tunnel VPNs that change routes without changing interface IPs. Debounce burst events (~500ms) into a single probe round.
 - [ ] Export / import config (JSON file picker)
 - [ ] DB/config migration system: versioned schema so each new version's config changes apply automatically for existing users on upgrade

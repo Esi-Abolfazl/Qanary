@@ -1045,6 +1045,39 @@ body {
   margin-top: 2px;
 }
 
+/* Probe-interval rows — label left, number input right. */
+.interval-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 13px;
+  color: var(--text);
+  margin: 2px 0 0;
+}
+.interval-label {
+  user-select: none;
+}
+.interval-row input {
+  width: 72px;
+  text-align: right;
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--r-sm);
+  padding: 7px 9px;
+  font-size: 13px;
+}
+.interval-row input:focus {
+  outline: none;
+  border-color: var(--brand);
+}
+.settings-note {
+  font-size: 11px;
+  color: var(--muted);
+  margin: 8px 0 0;
+  line-height: 1.4;
+}
+
 /* CSS toggle switch — hides the native checkbox, styles a sliding track. */
 .switch {
   position: relative;

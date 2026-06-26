@@ -73,9 +73,16 @@ pub fn effective_interval(base: Duration, fail_streak: u32) -> Duration {
 // Service probe task
 // ---------------------------------------------------------------------------
 
-/// Minimum probe interval, mirroring the old loop's floor (lib.rs) so a misconfigured base can't
-/// hammer the network.
-const MIN_INTERVAL_SECS: u64 = 5;
+/// Minimum probe interval so a misconfigured base can't hammer the network. Mirrors the floor
+/// applied in `update_settings`.
+const MIN_INTERVAL_SECS: u64 = 10;
+
+/// Pick a Service's base interval from its parent list's criticality, then apply the floor.
+/// Pure so it's unit-testable without an `AppHandle`.
+pub fn base_interval(critical: bool, critical_secs: u64, noncritical_secs: u64) -> u64 {
+    let secs = if critical { critical_secs } else { noncritical_secs };
+    secs.max(MIN_INTERVAL_SECS)
+}
 
 /// One **Service probe task**: probe this Service forever, pushing a Status delta each time, on a
 /// cadence it owns. Runs until aborted by the supervisor (config change).
@@ -97,7 +104,18 @@ async fn run_service_task(
         let (base, timeout_ms, client, sem) = {
             let state = app.state::<AppState>();
             let cfg = state.config.lock().unwrap();
-            let base = Duration::from_secs(cfg.probe_interval_secs.max(MIN_INTERVAL_SECS));
+            // Base interval is decided by this Service's parent list criticality.
+            let critical = cfg
+                .lists
+                .iter()
+                .find(|l| l.id == list_id)
+                .map(|l| l.critical)
+                .unwrap_or(false);
+            let base = Duration::from_secs(base_interval(
+                critical,
+                cfg.critical_interval_secs,
+                cfg.noncritical_interval_secs,
+            ));
             (base, cfg.timeout_ms, state.client.clone(), state.probe_sem.clone())
         };
 
@@ -284,6 +302,15 @@ mod tests {
         assert_eq!(backoff(base, 9), backoff(base, 4));
         // A larger base hits the ceiling.
         assert_eq!(backoff(Duration::from_secs(60), 4), BACKOFF_CEILING);
+    }
+
+    #[test]
+    fn base_interval_picks_by_criticality_and_floors() {
+        assert_eq!(base_interval(true, 20, 60), 20, "critical → critical_secs");
+        assert_eq!(base_interval(false, 20, 60), 60, "non-critical → noncritical_secs");
+        // Below the floor → clamped to MIN_INTERVAL_SECS (10).
+        assert_eq!(base_interval(true, 3, 60), 10, "critical below floor clamps to 10");
+        assert_eq!(base_interval(false, 20, 1), 10, "non-critical below floor clamps to 10");
     }
 
     #[test]
