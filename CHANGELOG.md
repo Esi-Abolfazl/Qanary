@@ -8,6 +8,16 @@ heading) become that release's notes. Dev-log-only subsections (`## Internal`, `
 `## Development`, `## Chore`, `## CI`, `## Build`, `## More info`) appear on the GitHub
 release page but are hidden from the in-app "What's new" modal.
 
+## [0.5.3]
+
+## What's new
+
+- Instant refresh on network changes — Qanary now probes the moment your system network state shifts (wifi on/off, ethernet plug/unplug, VPN connect/disconnect) instead of waiting for the interval timer, so status updates within about a second.
+
+## More info
+
+- [ADR 0018 — network-change-triggered refresh](https://github.com/Esi-Abolfazl/Qanary/blob/main/docs/adr/0018-network-change-triggered-refresh.md).
+
 ## [0.5.2]
 
 ## What's new

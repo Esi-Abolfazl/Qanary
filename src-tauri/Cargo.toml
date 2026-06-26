@@ -1,6 +1,6 @@
 [package]
 name = "qanary"
-version = "0.5.2"
+version = "0.5.3"
 description = "Qanary — connectivity monitor"
 authors = ["you"]
 edition = "2021"
@@ -33,4 +33,16 @@ tokio = { version = "1", features = ["rt-multi-thread", "macros", "net", "time",
 reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json"] }
 # Stable unique ids for services and lists.
 uuid = { version = "1", features = ["v4", "serde"] }
+# Network-change watcher: interface/route events → immediate probe trigger (ADR-0018).
+# if-watch: event-driven on Linux/Windows; ~10s poll backstop on macOS.
+if-watch = { version = "3", features = ["tokio"] }
+# StreamExt::next() + pin_mut! for the if-watch Stream.
+# futures-util 0.3.32 already in Cargo.lock (transitive dep) — no network needed.
+futures-util = "0.3"
+
+[target.'cfg(target_os = "macos")'.dependencies]
+# SCDynamicStore: event-driven macOS interface + route watcher, <1s latency (ADR-0018).
+system-configuration = "0.6"
+# CFRunLoop, CFString, CFArray — used with system_configuration in netwatch.rs.
+core-foundation = "0.9"
 

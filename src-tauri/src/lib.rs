@@ -7,6 +7,7 @@
 
 mod commands;
 mod models;
+mod netwatch;
 mod probe;
 mod scheduler;
 mod state;
@@ -124,6 +125,9 @@ pub fn run() {
             // Spawn one Service probe task per enabled Service, plus the WAN task.
             scheduler::respawn_tasks(app.handle());
             scheduler::spawn_wan_task(app.handle());
+
+            // Spawn the network-change watcher: fires probe_now on wifi/ethernet/VPN changes.
+            netwatch::spawn_netwatch_task(app.handle());
 
             Ok(())
         })

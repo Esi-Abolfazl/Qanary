@@ -22,6 +22,9 @@ Desktop connectivity monitor. Traffic-light status for whether your machine can 
 Seeded defaults: **Global** list is critical (red alarm), **Iran** list is non-critical (orange warn). All lists are fully configurable — flip the **Critical** toggle on any of them.
 
 - Shows WAN IP + country flag.
+- **Instant refresh on network changes** — probes the moment the system network state shifts (wifi on/off, ethernet plug/unplug, VPN up/down), so status reflects reality within ~1s instead of waiting out the interval timer.
+- **Configurable probe intervals** — critical lists refresh every 30s and non-critical lists every 60s by default (minimum 10s); both adjustable in **Settings**. Each service probes independently, so dots update one by one as their results land.
+- **Drag-and-drop reordering** — rearrange lists, the services within them, and the IP provider by dragging.
 - Add your own services and lists. Config persisted as local JSON.
 - Lives in the **system tray** with a dynamic icon that mirrors current status (green / orange / red).
 - Native **desktop notifications** on critical-list status transitions — fire when a critical list goes fully down and again on recovery (with optional sound).
@@ -82,4 +85,4 @@ Prebuilt apps are on the [Releases page](https://github.com/Esi-Abolfazl/Qanary/
 
 ## In-app updates
 
-Qanary checks for updates silently on every launch. Update button appears when a newer version is available — You can also trigger a check from **Settings**. After it relaunches, a what's-new dialog shows the new version's release notes.
+Qanary checks for updates silently on every launch and re-checks every ~6 hours while running. An update button appears when a newer version is available — you can also trigger a check from **Settings**. After it relaunches, a what's-new dialog shows the new version's release notes.
