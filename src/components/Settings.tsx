@@ -1,10 +1,19 @@
 import { useEffect, useState } from "react";
 import { getVersion } from "@tauri-apps/api/app";
 import { enable, disable, isEnabled } from "@tauri-apps/plugin-autostart";
+import {
+  save as saveDialog,
+  open as openDialog,
+} from "@tauri-apps/plugin-dialog";
 import type { Config } from "../types";
 import { parseHost } from "../utils/parseHost";
-import { checkForUpdate, downloadUpdate, installAndRelaunch, type UpdateInfo } from "../update";
-import { setHideDock } from "../api";
+import {
+  checkForUpdate,
+  downloadUpdate,
+  installAndRelaunch,
+  type UpdateInfo,
+} from "../update";
+import { exportConfig, setHideDock } from "../api";
 import { Switch } from "./Switch";
 import {
   DndContext,
@@ -53,7 +62,8 @@ function SortableProviderSlot({
   placeholder: string;
   onChange: (id: string, val: string) => void;
 }) {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: slot.id });
+  const { attributes, listeners, setNodeRef, transform, transition } =
+    useSortable({ id: slot.id });
   const style = { transform: CSS.Transform.toString(transform), transition };
   return (
     <div className="provider-slot" ref={setNodeRef} style={style}>
@@ -82,6 +92,7 @@ export function Settings({
   onClose,
   onSave,
   onShowReleaseNotes,
+  onImport,
 }: {
   config: Config | null;
   open: boolean;
@@ -96,6 +107,7 @@ export function Settings({
     upSound: boolean,
   ) => void;
   onShowReleaseNotes: () => void;
+  onImport: (path: string) => void;
 }) {
   const [slots, setSlots] = useState<ProviderSlot[]>(() => toSlots([]));
   // Probe intervals held as strings while editing; parsed + floored (≥10) on Save.
@@ -114,10 +126,18 @@ export function Settings({
   const [loginError, setLoginError] = useState<string | null>(null);
   const [hideDock, setHideDockState] = useState(false);
   const [hideDockError, setHideDockError] = useState<string | null>(null);
+  const [configMsg, setConfigMsg] = useState<{
+    text: string;
+    kind: "ok" | "err";
+  } | null>(null);
+  // Path picked for import, awaiting the overwrite confirmation. null = no pending import.
+  const [pendingImport, setPendingImport] = useState<string | null>(null);
   const isMac = navigator.userAgent.includes("Mac");
 
   useEffect(() => {
-    getVersion().then(setVersion).catch(() => {});
+    getVersion()
+      .then(setVersion)
+      .catch(() => {});
   }, []);
 
   // Re-seed every time the modal opens, so closing without Save discards pending edits
@@ -144,10 +164,14 @@ export function Settings({
   }, [open, config]);
 
   function updateSlotValue(id: string, val: string) {
-    setSlots((prev) => prev.map((s) => (s.id === id ? { ...s, value: val } : s)));
+    setSlots((prev) =>
+      prev.map((s) => (s.id === id ? { ...s, value: val } : s)),
+    );
   }
 
-  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
+  );
 
   function handleProviderDragEnd(event: DragEndEvent) {
     const { active, over } = event;
@@ -167,7 +191,8 @@ export function Settings({
     let ok = true;
     try {
       if (loginEnabled !== loginInitial) {
-        if (loginEnabled) await enable(); else await disable();
+        if (loginEnabled) await enable();
+        else await disable();
       }
     } catch {
       setLoginError("Could not update login item");
@@ -228,186 +253,314 @@ export function Settings({
   if (!open) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
-      <div
-        className="modal modal-settings"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <h3 className="modal-title">Settings</h3>
+    <>
+      <div className="modal-overlay" onClick={onClose}>
+        <div
+          className="modal modal-settings"
+          onClick={(e) => e.stopPropagation()}
+        >
+          <h3 className="modal-title">Settings</h3>
 
-        <form className="providers-form" onSubmit={handleSave}>
-          <fieldset className="settings-card">
-            <legend className="settings-card-title">IP providers (drag to reorder)</legend>
-            <DndContext sensors={sensors} onDragEnd={handleProviderDragEnd}>
-              <SortableContext items={slots.map((s) => s.id)} strategy={verticalListSortingStrategy}>
-                {slots.map((slot, i) => (
-                  <SortableProviderSlot
-                    key={slot.id}
-                    slot={slot}
-                    placeholder={
-                      ["ip.shecan.ir", "ifconfig.me/ip", "api.ipify.org", "ipify.ir"][i]
-                    }
-                    onChange={updateSlotValue}
-                  />
-                ))}
-              </SortableContext>
-            </DndContext>
-          </fieldset>
-
-          <fieldset className="settings-card">
-            <legend className="settings-card-title">Probe interval (seconds, min 10)</legend>
-            <div className="interval-row">
-              <label className="interval-label" htmlFor="critical-interval">
-                Critical lists
-              </label>
-              <input
-                id="critical-interval"
-                type="number"
-                min={10}
-                step={1}
-                value={criticalInterval}
-                onChange={(e) => setCriticalInterval(e.target.value)}
-              />
-            </div>
-            <div className="interval-row">
-              <label className="interval-label" htmlFor="noncritical-interval">
-                Non-critical lists
-              </label>
-              <input
-                id="noncritical-interval"
-                type="number"
-                min={10}
-                step={1}
-                value={noncriticalInterval}
-                onChange={(e) => setNoncriticalInterval(e.target.value)}
-              />
-            </div>
-            <p className="settings-note">
-              Probing too often can look like abuse — some services may rate-limit or
-              block you. Keep intervals as high as your needs allow.
-            </p>
-          </fieldset>
-
-          <fieldset className="settings-card">
-            <legend className="settings-card-title">Critical-list alerts</legend>
-            <div className="alert-grid">
-              <span className="alert-grid-head" />
-              <span className="alert-grid-head">Notify</span>
-              <span className="alert-grid-head">Sound</span>
-
-              <span className="alert-grid-row-label">Outage (down)</span>
-              <input
-                type="checkbox"
-                checked={downNotify}
-                onChange={(e) => setDownNotify(e.target.checked)}
-              />
-              <input
-                type="checkbox"
-                checked={downSound}
-                onChange={(e) => setDownSound(e.target.checked)}
-              />
-
-              <span className="alert-grid-row-label">Recovery (up)</span>
-              <input
-                type="checkbox"
-                checked={upNotify}
-                onChange={(e) => setUpNotify(e.target.checked)}
-              />
-              <input
-                type="checkbox"
-                checked={upSound}
-                onChange={(e) => setUpSound(e.target.checked)}
-              />
-            </div>
-          </fieldset>
-
-          <fieldset className="settings-card">
-            <legend className="settings-card-title">System</legend>
-            <div className="system-toggle-row">
-              <label className="system-toggle-label" htmlFor="login-toggle">
-                Launch at login
-              </label>
-              <Switch
-                id="login-toggle"
-                checked={loginEnabled}
-                onChange={setLoginEnabled}
-              />
-            </div>
-            {loginError && (
-              <span className="system-toggle-error">{loginError}</span>
-            )}
-
-            {isMac && (
-              <>
-                <div className="system-toggle-row">
-                  <label className="system-toggle-label" htmlFor="dock-toggle">
-                    Hide Dock icon
-                  </label>
-                  <Switch
-                    id="dock-toggle"
-                    checked={hideDock}
-                    onChange={setHideDockState}
-                  />
-                </div>
-                {hideDockError && (
-                  <span className="system-toggle-error">{hideDockError}</span>
-                )}
-              </>
-            )}
-          </fieldset>
-
-          <div className="modal-actions">
-            <button type="button" className="modal-cancel" onClick={onClose}>
-              Cancel
-            </button>
-            <button type="submit" className="modal-save">
-              Save
-            </button>
-          </div>
-        </form>
-
-        <div className="update-section">
-          <div className="update-meta">
-            <span className="app-version">Qanary{version && ` v${version}`}</span>
-            <button
-              type="button"
-              className="release-notes-link"
-              onClick={() => { onShowReleaseNotes(); onClose(); }}
-            >
-              Release notes
-            </button>
-          </div>
-
-          <div className="update-actions">
-            {updateState === "up-to-date" && (
-              <span className="update-msg">Up to date</span>
-            )}
-            {updateState === "error" && (
-              <span className="update-msg update-err">Check failed</span>
-            )}
-            {updateState === "installing" && (
-              <span className="update-msg">Installing…</span>
-            )}
-
-            {updateState === "available" && updateInfo ? (
-              <>
-                <span className="update-available-label">v{updateInfo.version} available</span>
-                <button className="update-install-btn" onClick={handleInstall}>
-                  Install &amp; restart
-                </button>
-              </>
-            ) : (
+          {/* Config export/import — standalone, NOT governed by the form's Save button. */}
+          <fieldset className="settings-card config-card">
+            <legend className="settings-card-title">Config</legend>
+            <div className="config-actions">
               <button
-                className="update-check-btn"
-                onClick={handleCheckUpdate}
-                disabled={updateState === "checking" || updateState === "installing"}
+                type="button"
+                className="config-action-btn"
+                onClick={async () => {
+                  setConfigMsg(null);
+                  const path = await saveDialog({
+                    defaultPath: "qanary-config.json",
+                    filters: [{ name: "JSON", extensions: ["json"] }],
+                  });
+                  if (!path) return;
+                  try {
+                    await exportConfig(path);
+                    setConfigMsg({ text: "Config exported.", kind: "ok" });
+                  } catch (e) {
+                    setConfigMsg({ text: `Export failed: ${e}`, kind: "err" });
+                  }
+                }}
               >
-                {updateState === "checking" ? "Checking…" : "Check for updates"}
+                Export…
               </button>
+              <button
+                type="button"
+                className="config-action-btn"
+                onClick={async () => {
+                  setConfigMsg(null);
+                  const path = await openDialog({
+                    filters: [{ name: "JSON", extensions: ["json"] }],
+                    multiple: false,
+                  });
+                  if (!path) return;
+                  // Confirm before overwriting — import is a full, destructive replace.
+                  setPendingImport(path as string);
+                }}
+              >
+                Import…
+              </button>
+            </div>
+            {configMsg && (
+              <span
+                className={
+                  configMsg.kind === "err"
+                    ? "config-msg config-msg-err"
+                    : "config-msg config-msg-ok"
+                }
+              >
+                {configMsg.text}
+              </span>
             )}
+          </fieldset>
+
+          <form className="providers-form" onSubmit={handleSave}>
+            <fieldset className="settings-card">
+              <legend className="settings-card-title">
+                IP providers (drag to reorder)
+              </legend>
+              <DndContext sensors={sensors} onDragEnd={handleProviderDragEnd}>
+                <SortableContext
+                  items={slots.map((s) => s.id)}
+                  strategy={verticalListSortingStrategy}
+                >
+                  {slots.map((slot, i) => (
+                    <SortableProviderSlot
+                      key={slot.id}
+                      slot={slot}
+                      placeholder={
+                        [
+                          "ip.shecan.ir",
+                          "ifconfig.me/ip",
+                          "api.ipify.org",
+                          "ipify.ir",
+                        ][i]
+                      }
+                      onChange={updateSlotValue}
+                    />
+                  ))}
+                </SortableContext>
+              </DndContext>
+            </fieldset>
+
+            <fieldset className="settings-card">
+              <legend className="settings-card-title">
+                Probe interval (seconds, min 10)
+              </legend>
+              <div className="interval-row">
+                <label className="interval-label" htmlFor="critical-interval">
+                  Critical lists
+                </label>
+                <input
+                  id="critical-interval"
+                  type="number"
+                  min={10}
+                  step={1}
+                  value={criticalInterval}
+                  onChange={(e) => setCriticalInterval(e.target.value)}
+                />
+              </div>
+              <div className="interval-row">
+                <label
+                  className="interval-label"
+                  htmlFor="noncritical-interval"
+                >
+                  Non-critical lists
+                </label>
+                <input
+                  id="noncritical-interval"
+                  type="number"
+                  min={10}
+                  step={1}
+                  value={noncriticalInterval}
+                  onChange={(e) => setNoncriticalInterval(e.target.value)}
+                />
+              </div>
+              <p className="settings-note">
+                Probing too often can look like abuse — some services may
+                rate-limit or block you. Keep intervals as high as your needs
+                allow.
+              </p>
+            </fieldset>
+
+            <fieldset className="settings-card">
+              <legend className="settings-card-title">
+                Critical-list alerts
+              </legend>
+              <div className="alert-grid">
+                <span className="alert-grid-head" />
+                <span className="alert-grid-head">Notify</span>
+                <span className="alert-grid-head">Sound</span>
+
+                <span className="alert-grid-row-label">Outage (down)</span>
+                <input
+                  type="checkbox"
+                  checked={downNotify}
+                  onChange={(e) => setDownNotify(e.target.checked)}
+                />
+                <input
+                  type="checkbox"
+                  checked={downSound}
+                  onChange={(e) => setDownSound(e.target.checked)}
+                />
+
+                <span className="alert-grid-row-label">Recovery (up)</span>
+                <input
+                  type="checkbox"
+                  checked={upNotify}
+                  onChange={(e) => setUpNotify(e.target.checked)}
+                />
+                <input
+                  type="checkbox"
+                  checked={upSound}
+                  onChange={(e) => setUpSound(e.target.checked)}
+                />
+              </div>
+            </fieldset>
+
+            <fieldset className="settings-card">
+              <legend className="settings-card-title">System</legend>
+              <div className="system-toggle-row">
+                <label className="system-toggle-label" htmlFor="login-toggle">
+                  Launch at login
+                </label>
+                <Switch
+                  id="login-toggle"
+                  checked={loginEnabled}
+                  onChange={setLoginEnabled}
+                />
+              </div>
+              {loginError && (
+                <span className="system-toggle-error">{loginError}</span>
+              )}
+
+              {isMac && (
+                <>
+                  <div className="system-toggle-row">
+                    <label
+                      className="system-toggle-label"
+                      htmlFor="dock-toggle"
+                    >
+                      Hide Dock icon
+                    </label>
+                    <Switch
+                      id="dock-toggle"
+                      checked={hideDock}
+                      onChange={setHideDockState}
+                    />
+                  </div>
+                  {hideDockError && (
+                    <span className="system-toggle-error">{hideDockError}</span>
+                  )}
+                </>
+              )}
+            </fieldset>
+
+            <div className="modal-actions">
+              <button type="button" className="modal-cancel" onClick={onClose}>
+                Cancel
+              </button>
+              <button type="submit" className="modal-save">
+                Save
+              </button>
+            </div>
+          </form>
+
+          <div className="update-section">
+            <div className="update-meta">
+              <span className="app-version">
+                Qanary{version && ` v${version}`}
+              </span>
+              <button
+                type="button"
+                className="release-notes-link"
+                onClick={() => {
+                  onShowReleaseNotes();
+                  onClose();
+                }}
+              >
+                Release notes
+              </button>
+            </div>
+
+            <div className="update-actions">
+              {updateState === "up-to-date" && (
+                <span className="update-msg">Up to date</span>
+              )}
+              {updateState === "error" && (
+                <span className="update-msg update-err">Check failed</span>
+              )}
+              {updateState === "installing" && (
+                <span className="update-msg">Installing…</span>
+              )}
+
+              {updateState === "available" && updateInfo ? (
+                <>
+                  <span className="update-available-label">
+                    v{updateInfo.version} available
+                  </span>
+                  <button
+                    className="update-install-btn"
+                    onClick={handleInstall}
+                  >
+                    Install &amp; restart
+                  </button>
+                </>
+              ) : (
+                <button
+                  className="update-check-btn"
+                  onClick={handleCheckUpdate}
+                  disabled={
+                    updateState === "checking" || updateState === "installing"
+                  }
+                >
+                  {updateState === "checking"
+                    ? "Checking…"
+                    : "Check for updates"}
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
+
+      {/* Import confirmation — import is a full destructive replace of the live config. */}
+      {pendingImport && (
+        <div className="modal-overlay" onClick={() => setPendingImport(null)}>
+          <div
+            className="modal modal-confirm"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <h3 className="modal-title">Import config?</h3>
+            <p className="modal-confirm-text">
+              This will overwrite and clear your current setup — all lists,
+              services, and settings will be replaced by the imported file. This
+              cannot be undone.
+            </p>
+            <div className="modal-actions">
+              <button
+                type="button"
+                className="modal-cancel"
+                onClick={() => setPendingImport(null)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="modal-save modal-danger"
+                onClick={() => {
+                  const path = pendingImport;
+                  setPendingImport(null);
+                  onImport(path);
+                }}
+              >
+                Overwrite
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

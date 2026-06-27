@@ -8,6 +8,20 @@ heading) become that release's notes. Dev-log-only subsections (`## Internal`, `
 `## Development`, `## Chore`, `## CI`, `## Build`, `## More info`) appear on the GitHub
 release page but are hidden from the in-app "What's new" modal.
 
+## [0.5.5]
+
+## What's new
+
+- Export & import your config — back up your lists and settings to a `.json` file, or move them to another machine, from the new Config section at the top of Settings. Importing replaces your current setup and asks you to confirm first.
+
+## Internal
+
+- Versioned config schema (`schema_version`) with a numbered migration runner, so future config-shape changes upgrade old configs automatically on load and on import.
+
+## More info
+
+- [ADR 0019 — versioned config schema + JSON export/import](https://github.com/Esi-Abolfazl/Qanary/blob/main/docs/adr/0019-config-export-import-migration.md).
+
 ## [0.5.3]
 
 ## What's new

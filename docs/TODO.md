@@ -15,8 +15,8 @@
 - [x] Drag & drop reordering for lists, services, and IP provider (change their place/order)
 - [x] Probe interval by list criticality (critical 30s / non-critical 60s defaults, min 10s, editable from Settings) — reframed from "per-service override" (ADR-0017)
 - [x] Network-change-triggered refresh: probe immediately when system network state changes (wifi on/off, ethernet plug, VPN up/down) instead of only on the interval timer. Use interface-change watching (`if-watch`: route socket on macOS, netlink on Linux, `NotifyIpInterfaceChange` on Windows) for wifi/ethernet/tunnel-interface VPNs. Additionally watch the route table (macOS `SCDynamicStore`/`PF_ROUTE`) to catch split-tunnel VPNs that change routes without changing interface IPs. Debounce burst events (~500ms) into a single probe round. (ADR-0018)
-- [ ] Export / import config (JSON file picker)
-- [ ] DB/config migration system: versioned schema so each new version's config changes apply automatically for existing users on upgrade
+- [x] Export / import config (JSON file picker) — native save/open dialog; Config card at top of Settings (standalone, outside the Save form); import guarded by an overwrite-confirmation modal (ADR-0019)
+- [x] DB/config migration system: versioned schema so each new version's config changes apply automatically for existing users on upgrade — integer `schema_version` + numbered `store::migrate` runner (ADR-0019)
 - [ ] Wildcard endpoint probing (`*.host.com` → probe resolved subdomain)
 - [ ] Block-page detection via content heuristics (HTTP 200 but wrong content)
 - [ ] Probe accuracy (own plan): confirm-before-flip (require K consecutive failures before showing Down — kill transient false outages); backoff on success only (keep fast retries while Down so recovery shows quickly, back off only stable-Up services); HEAD→GET fallback. Separate from the per-Service probe-task rewrite (`.claude/plans/2026-06-25-probe-system-rewrite-per-service-tasks.md`), which keeps `classify` verbatim and only changes scheduling.

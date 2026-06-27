@@ -23,6 +23,8 @@ vi.mock("./api", () => ({
   reorderServices: vi.fn(),
   updateSettings: vi.fn(),
   setHideDock: vi.fn(),
+  exportConfig: vi.fn(),
+  importConfig: vi.fn(),
 }));
 
 vi.mock("./update", () => ({
@@ -60,6 +62,7 @@ const SNAPSHOT: Snapshot = {
 };
 
 const CONFIG: Config = {
+  schema_version: 1,
   lists: [],
   critical_interval_secs: 20,
   noncritical_interval_secs: 60,
@@ -74,6 +77,7 @@ const CONFIG: Config = {
 };
 
 beforeEach(() => {
+  vi.clearAllMocks(); // reset call history between tests (so not.toHaveBeenCalled is reliable)
   vi.mocked(api.getSnapshot).mockResolvedValue(SNAPSHOT);
   vi.mocked(api.getConfig).mockResolvedValue(CONFIG);
   vi.mocked(api.takeNewChangelog).mockResolvedValue([]);
@@ -120,5 +124,84 @@ describe("App", () => {
 
     // Settings panel should be visible
     expect(screen.getByRole("heading", { name: /^settings$/i })).toBeInTheDocument();
+  });
+
+  it("settings panel shows Config card with Export and Import buttons", async () => {
+    const user = userEvent.setup();
+    render(<App />);
+    await waitFor(() => screen.getByText("All clear"));
+
+    // Open menu → Settings
+    await user.click(screen.getByRole("button", { name: /menu/i }));
+    await user.click(screen.getByRole("button", { name: /^settings$/i }));
+
+    // Config card legend and both buttons must be rendered
+    expect(screen.getByText("Config")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /export/i })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: /import/i })).toBeInTheDocument();
+  });
+
+  it("Export button calls saveDialog (file picker) — cancel leaves config untouched", async () => {
+    const { save: saveMock } = await import("@tauri-apps/plugin-dialog");
+    vi.mocked(saveMock).mockResolvedValue(null); // user cancels picker
+
+    const user = userEvent.setup();
+    render(<App />);
+    await waitFor(() => screen.getByText("All clear"));
+
+    await user.click(screen.getByRole("button", { name: /menu/i }));
+    await user.click(screen.getByRole("button", { name: /^settings$/i }));
+    await user.click(screen.getByRole("button", { name: /export/i }));
+
+    // Dialog was shown; cancel means exportConfig is NOT invoked
+    await waitFor(() => expect(saveMock).toHaveBeenCalled());
+    expect(api.exportConfig).not.toHaveBeenCalled();
+  });
+
+  it("Import asks for overwrite confirmation before calling importConfig", async () => {
+    const { open: openMock } = await import("@tauri-apps/plugin-dialog");
+    vi.mocked(openMock).mockResolvedValue("/tmp/picked-config.json");
+    vi.mocked(api.importConfig).mockResolvedValue(CONFIG);
+
+    const user = userEvent.setup();
+    render(<App />);
+    await waitFor(() => screen.getByText("All clear"));
+
+    await user.click(screen.getByRole("button", { name: /menu/i }));
+    await user.click(screen.getByRole("button", { name: /^settings$/i }));
+    await user.click(screen.getByRole("button", { name: /import/i }));
+
+    // Confirmation modal appears; importConfig must NOT have run yet.
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: /import config\?/i })).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/overwrite and clear/i)).toBeInTheDocument();
+    expect(api.importConfig).not.toHaveBeenCalled();
+
+    // Confirm → importConfig fires with the picked path.
+    await user.click(screen.getByRole("button", { name: /overwrite/i }));
+    expect(api.importConfig).toHaveBeenCalledWith("/tmp/picked-config.json");
+  });
+
+  it("Import confirmation Cancel aborts without calling importConfig", async () => {
+    const { open: openMock } = await import("@tauri-apps/plugin-dialog");
+    vi.mocked(openMock).mockResolvedValue("/tmp/picked-config.json");
+
+    const user = userEvent.setup();
+    render(<App />);
+    await waitFor(() => screen.getByText("All clear"));
+
+    await user.click(screen.getByRole("button", { name: /menu/i }));
+    await user.click(screen.getByRole("button", { name: /^settings$/i }));
+    await user.click(screen.getByRole("button", { name: /import/i }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("heading", { name: /import config\?/i })).toBeInTheDocument(),
+    );
+    // Cancel the confirm (the one inside the confirm modal).
+    const cancelBtns = screen.getAllByRole("button", { name: /^cancel$/i });
+    await user.click(cancelBtns[cancelBtns.length - 1]);
+
+    expect(api.importConfig).not.toHaveBeenCalled();
   });
 });

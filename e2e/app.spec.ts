@@ -8,7 +8,7 @@
  *   3. Add-list modal → `add_list` invoked with parsed args
  *   4. Settings modal → `update_settings` invoked after changing a field
  */
-import { test, expect, SNAPSHOT } from "./fixtures";
+import { test, expect } from "./fixtures";
 
 test("1 — initial snapshot renders green status", async ({ mockedPage: page }) => {
   // Hero should show the "all clear" headline for overall=green
@@ -70,4 +70,17 @@ test("4 — settings modal opens and update_settings is invoked", async ({
 
   // Verify update_settings was called
   await expect.poll(() => getInvokedCmds()).toContain("update_settings");
+});
+
+test("5 — settings panel shows Config card with Export and Import buttons", async ({
+  mockedPage: page,
+}) => {
+  // Open menu → Settings
+  await page.getByRole("button", { name: /menu/i }).click();
+  await page.getByRole("button", { name: /^settings$/i }).click();
+
+  // Config card legend and both action buttons must be present
+  await expect(page.getByText("Config", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: /export/i })).toBeVisible();
+  await expect(page.getByRole("button", { name: /import/i })).toBeVisible();
 });

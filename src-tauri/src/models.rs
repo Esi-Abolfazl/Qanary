@@ -10,6 +10,11 @@
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
+/// Current config schema version. Bump this (and add a migration step in `store::migrate`)
+/// whenever the config shape changes in a way serde cannot handle automatically.
+/// Additive fields with `#[serde(default)]` do NOT need a bump — serde fills the default.
+pub const CURRENT_SCHEMA: u32 = 1;
+
 // ---------------------------------------------------------------------------
 // Persisted config
 // ---------------------------------------------------------------------------
@@ -121,6 +126,10 @@ impl ServiceList {
 /// Everything persisted to `config.json`.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
+    /// Integer schema version. Absent in configs predating this field → 0 (via serde default).
+    /// `store::migrate` runs numbered steps to bring it up to `CURRENT_SCHEMA` on load/import.
+    #[serde(default)]
+    pub schema_version: u32,
     pub lists: Vec<ServiceList>,
     /// Probe cadence for **critical** lists, in seconds. Floored at the scheduler's
     /// MIN_INTERVAL_SECS. Default 30.
@@ -225,6 +234,7 @@ impl Default for Config {
         );
         global.critical = true;
         Config {
+            schema_version: CURRENT_SCHEMA,
             lists: vec![global, iran],
             critical_interval_secs: default_critical_interval(),
             noncritical_interval_secs: default_noncritical_interval(),

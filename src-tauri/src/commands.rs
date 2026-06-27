@@ -528,6 +528,46 @@ pub fn set_list_collapsed(app: AppHandle, list_id: String, collapsed: bool) -> C
     updated
 }
 
+/// Write the current live config to a user-picked file path.
+/// The file is plain JSON (same shape as `config.json`) and can be re-imported.
+#[tauri::command]
+pub fn export_config(state: State<AppState>, path: String) -> Result<(), String> {
+    let cfg = state.config.lock().unwrap().clone();
+    crate::store::save(std::path::Path::new(&path), &cfg)
+        .map_err(|e| format!("Export failed: {e}"))
+}
+
+/// Load a config from a user-picked file path, migrate it if needed, and replace the live config.
+///
+/// Rejects files whose `schema_version` is newer than `CURRENT_SCHEMA` (made by a newer app).
+/// On success: saves to the real config path, emits checking, respawns tasks, returns the config.
+/// Mirrors `reset_config` — validates and migrates BEFORE swapping state (unlike `mutate`).
+#[tauri::command]
+pub fn import_config(app: AppHandle, path: String) -> Result<Config, String> {
+    let json = std::fs::read_to_string(&path)
+        .map_err(|e| format!("Cannot read file: {e}"))?;
+    let mut cfg: Config = serde_json::from_str(&json)
+        .map_err(|e| format!("Invalid config file: {e}"))?;
+
+    if cfg.schema_version > crate::models::CURRENT_SCHEMA {
+        return Err(format!(
+            "This config was made by a newer version of Qanary (schema {}). Please update the app first.",
+            cfg.schema_version
+        ));
+    }
+
+    crate::store::migrate(&mut cfg);
+
+    let state = app.state::<AppState>();
+    *state.config.lock().unwrap() = cfg.clone();
+    if let Err(e) = crate::store::save(&state.config_path, &cfg) {
+        eprintln!("qanary: failed to save imported config: {e}");
+    }
+    crate::emit_checking(&app);
+    crate::scheduler::respawn_tasks(&app);
+    Ok(cfg)
+}
+
 /// Apply `f` to the config under lock, persist the result, trigger a background re-probe, and
 /// return the updated config. Centralises the save + re-probe that every mutation needs.
 fn mutate<F: FnOnce(&mut Config)>(app: &AppHandle, f: F) -> Config {

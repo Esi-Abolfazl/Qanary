@@ -36,6 +36,14 @@ export const removeList = (listId: string) => invoke<Config>("remove_list", { li
 
 export const resetConfig = () => invoke<Config>("reset_config");
 
+/** Write the current config to a user-picked file path. */
+export const exportConfig = (path: string) =>
+  invoke<void>("export_config", { path });
+
+/** Load a config from `path`, migrate it, and replace the live config. Returns the migrated config. */
+export const importConfig = (path: string) =>
+  invoke<Config>("import_config", { path });
+
 export const setListCollapsed = (listId: string, collapsed: boolean) =>
   invoke<void>("set_list_collapsed", { listId, collapsed });
 

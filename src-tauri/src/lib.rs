@@ -61,6 +61,7 @@ pub fn run() {
             tauri_plugin_autostart::MacosLauncher::LaunchAgent,
             Some(vec!["--hidden"]),
         ))
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // Config path inside the per-app config dir (created on first save).
             let config_path = app
@@ -157,6 +158,8 @@ pub fn run() {
             commands::set_hide_dock,
             commands::take_new_changelog,
             commands::get_changelog,
+            commands::export_config,
+            commands::import_config,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

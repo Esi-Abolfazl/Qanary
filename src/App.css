@@ -935,6 +935,26 @@ body {
   background: var(--brand-press);
 }
 
+/* Destructive confirm button (e.g. import overwrite) — red instead of brand. */
+.modal-danger {
+  background: var(--state-down, #e03131);
+  color: #fff;
+}
+.modal-danger:hover {
+  background: color-mix(in srgb, var(--state-down, #e03131) 85%, #000);
+}
+
+/* Confirm-dialog body text (import overwrite warning). */
+.modal-confirm {
+  max-width: 360px;
+}
+.modal-confirm-text {
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--muted);
+  margin: 4px 0 12px;
+}
+
 /* ---------- Service modal (textarea variant) ---------- */
 
 .modal-textarea {
@@ -1043,6 +1063,41 @@ body {
   font-size: 11px;
   color: var(--state-down, #e03131);
   margin-top: 2px;
+}
+
+/* Config card — Export / Import buttons side by side. Standalone section,
+   not part of the Settings form (no Save needed for export/import). */
+.config-card {
+  margin-bottom: 18px;
+}
+.config-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+.config-action-btn {
+  flex: 1;
+  padding: 5px 10px;
+  font-size: 13px;
+  border: 1px solid var(--border);
+  border-radius: var(--r-sm, 4px);
+  background: var(--panel);
+  color: var(--text);
+  cursor: pointer;
+}
+.config-action-btn:hover {
+  background: var(--bg-inset, var(--panel-2));
+}
+/* Inline export/import feedback. Success is muted-neutral, not alarm-red. */
+.config-msg {
+  font-size: 11px;
+  margin-top: 2px;
+}
+.config-msg-ok {
+  color: var(--state-up, #1fb872);
+}
+.config-msg-err {
+  color: var(--state-down, #e03131);
 }
 
 /* Probe-interval rows — label left, number input right. */

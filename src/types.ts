@@ -81,6 +81,7 @@ export interface ServiceList {
 }
 
 export interface Config {
+  schema_version: number;
   lists: ServiceList[];
   critical_interval_secs: number;
   noncritical_interval_secs: number;

@@ -427,6 +427,12 @@ function App() {
             if (entries.length > 0) setChangelog(entries);
           })
         }
+        onImport={(path) =>
+          api
+            .importConfig(path)
+            .then(() => window.location.reload())
+            .catch((e) => alert(`Import failed: ${e}`))
+        }
       />
     </main>
   );

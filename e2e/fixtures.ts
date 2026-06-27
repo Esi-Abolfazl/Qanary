@@ -42,6 +42,7 @@ export const SNAPSHOT: Snapshot = {
 };
 
 export const CONFIG: Config = {
+  schema_version: 1,
   lists: [],
   critical_interval_secs: 20,
   noncritical_interval_secs: 60,
@@ -103,7 +104,8 @@ export const test = base.extend<QanaryFixtures>({
               case "take_new_changelog": return null;
               case "set_list_collapsed":
               case "reorder_lists":
-              case "reorder_services": return null;
+              case "reorder_services":
+              case "export_config": return null;
               case "add_services":
               case "update_service":
               case "remove_service":
@@ -112,7 +114,8 @@ export const test = base.extend<QanaryFixtures>({
               case "remove_list":
               case "reset_config":
               case "update_settings":
-              case "set_hide_dock": return cfg;
+              case "set_hide_dock":
+              case "import_config": return cfg;
               default: return null;
             }
           },

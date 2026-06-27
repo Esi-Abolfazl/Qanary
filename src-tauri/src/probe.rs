@@ -288,6 +288,7 @@ mod tests {
         let ep_b = Endpoint::new("b.com", 443);
         let svc_b = Service::with_endpoints("B", vec![ep_b]);
         let config = Config {
+            schema_version: crate::models::CURRENT_SCHEMA,
             lists: vec![ServiceList {
                 id: "l1".into(),
                 name: "Test".into(),
