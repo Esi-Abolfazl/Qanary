@@ -16,15 +16,19 @@ to varying degrees depending on how many of its Endpoints respond.
 _Avoid_: host (bare), target, address
 
 **Endpoint state**:
-The probe result for a single Endpoint: `up` / `blocked` / `down` / `checking`.
+The probe result for a single Endpoint: `up` / `reachable` / `blocked` / `down` / `checking`.
 `blocked` = TCP connected but HTTPS failed (likely interception).
+`reachable` (blue) = TCP-only confirmation, HTTPS deliberately skipped — used for
+Wildcard endpoints, whose synthesised subdomain would falsely fail TLS. No latency recorded.
 _Avoid_: status
 
 **Service state**:
 The Service's displayed dot, computed **worst-wins** over its Endpoint states with
-precedence `down > blocked > checking > up`. Reuses the Endpoint-state palette
-(green/yellow/red/grey). A Service is **fully failing** (the separate rollup used for
-List `all_down`) only when *every* Endpoint is failing (blocked or down).
+precedence `down > blocked > checking > up > reachable`. Reuses the Endpoint-state palette
+(green/blue/orange/red/grey). `reachable` is a non-failure ranked below `up`: a single
+fully-verified `up` Endpoint shows the Service green; blue shows only when *every* Endpoint
+is `reachable` (TCP-only wildcards). A Service is **fully failing** (the separate rollup used
+for List `all_down`) only when *every* Endpoint is failing (blocked or down).
 _Avoid_: health, grade, severity (reserve "severity" for the overall app traffic light)
 
 **List**:
@@ -67,6 +71,15 @@ One `## [version]` section of CHANGELOG.md (dev-only subsections stripped for th
 The "What's new" modal shows a *list* of entries — every version released since the user
 last saw notes — newest expanded, older collapsed.
 _Avoid_: release note (bare), section
+
+**Wildcard endpoint**:
+An Endpoint whose host is written `*.domain` (e.g. `*.cursor.sh`). The wildcard is stored
+literally and shown verbatim in the UI; at probe time the backend swaps the `*` for a fresh
+random label (e.g. `<rand>.cursor.sh`) so it tests the wildcard zone's reachability rather
+than the (often dead) apex. One Endpoint, one probe — not an enumeration of subdomains.
+Probed **TCP-only**: the synthesised label rarely matches the zone's TLS cert, so HTTPS is
+skipped — TCP-ok → `reachable` (blue), TCP-fail → `down`; never `blocked`, never latency.
+_Avoid_: glob, pattern, apex (the apex is the bare domain, which is what this avoids probing)
 
 **Effective interval**:
 The actual sleep a Service probe task waits before its next probe, derived from the

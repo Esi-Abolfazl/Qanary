@@ -1,10 +1,20 @@
 import { useEffect, useRef, useState } from "react";
-import type { ServiceState, ServiceStatus } from "../types";
+import type { EndpointStatus, ServiceState, ServiceStatus } from "../types";
 import { Icon } from "./Icon";
 import type { DraggableAttributes, DraggableSyntheticListeners } from "@dnd-kit/core";
 
+/** Trailing note for an endpoint: latency when Up, "TCP only" for a wildcard's
+ *  TLS-skipped Reachable, otherwise nothing. */
+function endpointNote(ep: EndpointStatus | undefined): string {
+  if (!ep) return "";
+  if (ep.state === "reachable") return "TCP only";
+  if (ep.state === "up" && ep.latency_ms != null) return `${ep.latency_ms} ms`;
+  return "";
+}
+
 const STATE_TITLE: Record<ServiceState, string> = {
-  up: "Reachable",
+  up: "Up — server answered over HTTPS",
+  reachable: "Reachable (TCP only) — wildcard zone; HTTPS not checked",
   blocked: "Blocked — TCP connected but HTTPS failed (likely interception)",
   down: "No route — TCP connect failed or timed out",
   checking: "Checking…",
@@ -50,6 +60,9 @@ export function ServiceRow({
     (e) => e.state === "blocked",
   ).length;
   const reachedCount = status.endpoints.filter((e) => e.state === "up").length;
+  const tcpOnlyCount = status.endpoints.filter(
+    (e) => e.state === "reachable",
+  ).length;
   const downCount = status.endpoints.filter((e) => e.state === "down").length;
 
   const primaryEndpoint = status.endpoints[0];
@@ -63,12 +76,9 @@ export function ServiceRow({
     }
   }
 
-  const singleLatency =
-    !multiEndpoint &&
-    status.state === "up" &&
-    primaryEndpoint?.latency_ms != null
-      ? `${primaryEndpoint.latency_ms} ms`
-      : "";
+  // Latency for a confirmed Up; for a wildcard's TCP-only Reachable, a note instead
+  // (no HTTPS leg ran, so there's no full-path latency to show).
+  const singleLatency = !multiEndpoint ? endpointNote(primaryEndpoint) : "";
 
   const faviconHost = primaryEndpoint?.host ?? "";
 
@@ -115,6 +125,15 @@ export function ServiceRow({
                 <span>
                   {" "}
                   · {reachedCount} <span className="dot dot-small dot-up" />
+                </span>
+              ) : (
+                <></>
+              )}
+              {tcpOnlyCount > 0 ? (
+                <span>
+                  {" "}
+                  · {tcpOnlyCount}{" "}
+                  <span className="dot dot-small dot-reachable" />
                 </span>
               ) : (
                 <></>
@@ -195,10 +214,7 @@ export function ServiceRow({
       {multiEndpoint && expanded && (
         <ul className="endpoint-list">
           {status.endpoints.map((ep) => {
-            const epLatency =
-              ep.state === "up" && ep.latency_ms != null
-                ? `${ep.latency_ms} ms`
-                : "";
+            const epLatency = endpointNote(ep);
             return (
               <li key={ep.id} className="endpoint-row">
                 <span

@@ -183,6 +183,34 @@ describe("App", () => {
     expect(api.importConfig).toHaveBeenCalledWith("/tmp/picked-config.json");
   });
 
+  it('wildcard endpoint renders blue "reachable" dot and "TCP only" note', async () => {
+    const wildcardSnap: Snapshot = {
+      ...SNAPSHOT,
+      lists: [
+        {
+          ...SNAPSHOT.lists[0],
+          services: [
+            {
+              id: "cursor",
+              label: "Cursor",
+              state: "reachable",
+              endpoints: [
+                { id: "w1", host: "*.cursor.sh", state: "reachable", latency_ms: null },
+              ],
+            },
+          ],
+        },
+      ],
+    };
+    vi.mocked(api.getSnapshot).mockResolvedValue(wildcardSnap);
+
+    render(<App />);
+    await waitFor(() => expect(screen.getByText("*.cursor.sh")).toBeInTheDocument());
+    // TCP-only note shown in place of latency, and the dot carries the reachable title.
+    expect(screen.getByText("TCP only")).toBeInTheDocument();
+    expect(screen.getByTitle(/reachable \(tcp only\)/i)).toBeInTheDocument();
+  });
+
   it("Import confirmation Cancel aborts without calling importConfig", async () => {
     const { open: openMock } = await import("@tauri-apps/plugin-dialog");
     vi.mocked(openMock).mockResolvedValue("/tmp/picked-config.json");

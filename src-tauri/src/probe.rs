@@ -22,6 +22,7 @@ use std::time::{Duration, Instant};
 use tokio::net::TcpStream;
 use tokio::sync::Semaphore;
 use tokio::task::JoinSet;
+use uuid::Uuid;
 
 /// Max simultaneous probes. Bounds endpoint-level concurrency even with many-endpoint services.
 pub const MAX_CONCURRENT: usize = 8;
@@ -39,6 +40,26 @@ pub fn classify(tcp_ok: bool, http_ok: bool) -> ServiceState {
     }
 }
 
+/// Resolve a stored host for probing.
+///
+/// Wildcard endpoints (`*.host.com`) can't be probed literally — DNS wildcards resolve
+/// any concrete label, so we synthesise one fresh per probe round using the first 8 hex
+/// chars of a UUID.  A plain host is returned unchanged.
+///
+/// Examples:
+///   `"api.host.com"` → `"api.host.com"`
+///   `"*.host.com"`   → `"3f9a1b2c.host.com"`  (random each call)
+fn probe_host(stored: &str) -> String {
+    if let Some(base) = stored.strip_prefix("*.") {
+        // First 8 chars of a UUID v4 simple (no hyphens) → a random hex label.
+        // Starts with a hex digit (0–f), which satisfies RFC 1123 (leading digit is fine).
+        let label = &Uuid::new_v4().simple().to_string()[..8];
+        format!("{label}.{base}")
+    } else {
+        stored.to_string()
+    }
+}
+
 /// Probe one endpoint. Returns its state and the TCP-connect latency (when it connected).
 async fn probe_endpoint(
     client: &reqwest::Client,
@@ -46,13 +67,20 @@ async fn probe_endpoint(
     port: u16,
     timeout_ms: u64,
 ) -> (ServiceState, Option<u64>) {
+    // For wildcard endpoints (`*.host.com`), synthesise a random concrete subdomain.
+    // This ensures we probe a name wildcard DNS actually resolves rather than the bare
+    // apex, which often has no server.  Display always shows the stored literal (set by
+    // the caller via EndpointStatus.host) — this swap is invisible to the UI.
+    let is_wildcard = host.starts_with("*.");
+    let target = probe_host(host);
+
     let timeout = Duration::from_millis(timeout_ms);
 
     // 1. TCP connect (also does DNS). Start the latency clock here so it covers
     //    the full reachability cost (DNS + TCP + TLS + HTTP), not just the SYN/ACK.
     let started = Instant::now();
     let tcp_ok = matches!(
-        tokio::time::timeout(timeout, TcpStream::connect((host, port))).await,
+        tokio::time::timeout(timeout, TcpStream::connect((target.as_str(), port))).await,
         Ok(Ok(_))
     );
     // TCP-connect-only time, used as the fallback latency for Blocked endpoints
@@ -63,11 +91,18 @@ async fn probe_endpoint(
         return (ServiceState::Down, None);
     }
 
+    // Wildcard endpoints stop at TCP: the synthesised subdomain almost never matches the
+    // zone's TLS cert, so an HTTPS probe would falsely read as Blocked. TCP reaching the
+    // zone is the honest signal here → Reachable (blue). No latency (HTTPS path not run).
+    if is_wildcard {
+        return (ServiceState::Reachable, None);
+    }
+
     // 2. TCP worked — does the HTTPS layer answer? Any response (even 4xx/5xx) counts as Up.
     let url = if port == 443 {
-        format!("https://{host}/")
+        format!("https://{target}/")
     } else {
-        format!("https://{host}:{port}/")
+        format!("https://{target}:{port}/")
     };
     let http_ok = client.head(&url).send().await.is_ok();
 
@@ -259,6 +294,34 @@ mod tests {
         assert_eq!(worst_state(&[Up, Checking]), Checking);
         assert_eq!(worst_state(&[Up]), Up);
         assert_eq!(worst_state(&[]), Checking); // empty → Checking
+        // Among settled non-failures, a single Up promotes the dot to green.
+        assert_eq!(worst_state(&[Up, Reachable]), Up); // mixed → green, not blue
+        assert_eq!(worst_state(&[Reachable, Reachable]), Reachable); // all wildcard → blue
+        assert_eq!(worst_state(&[Reachable, Checking]), Checking); // still probing
+        assert_eq!(worst_state(&[Reachable, Blocked]), Blocked);
+        assert_eq!(worst_state(&[Reachable, Down]), Down);
+        assert_eq!(worst_state(&[Reachable]), Reachable);
+    }
+
+    #[test]
+    fn reachable_is_not_a_failure() {
+        use ServiceState::*;
+        assert!(!Reachable.is_failure(), "reachable means TCP connected");
+        // A service of only reachable endpoints is not fully failing → list not all_down.
+        assert!(!svc_status(&[Reachable]).fully_failing());
+        assert!(!list_status(&[&[Reachable]]).all_down);
+        assert!(!list_status(&[&[Reachable, Up]]).all_down);
+    }
+
+    #[tokio::test]
+    async fn wildcard_unreachable_is_down_not_reachable() {
+        // A wildcard whose synthesised label can't resolve/connect must read Down,
+        // never Reachable — Reachable requires an actual TCP connection.
+        let svc = Service::with_endpoints("W", vec![Endpoint::new("*.127.0.0.1", 1)]);
+        let client = reqwest::Client::new();
+        let sem = Arc::new(Semaphore::new(MAX_CONCURRENT));
+        let status = probe_service(&svc, &client, &sem, 500).await;
+        assert_eq!(status.state, ServiceState::Down);
     }
 
     #[test]
@@ -327,6 +390,34 @@ mod tests {
         assert_eq!(status.endpoints.len(), 1, "one endpoint in, one status out");
         assert_eq!(status.state, ServiceState::Down, "refused TCP → worst-wins Down");
         assert!(status.fully_failing());
+    }
+
+    #[test]
+    fn probe_host_plain_passes_through() {
+        assert_eq!(probe_host("api.host.com"), "api.host.com");
+        assert_eq!(probe_host("google.com"), "google.com");
+    }
+
+    #[test]
+    fn probe_host_wildcard_synthesises_subdomain() {
+        let result = probe_host("*.host.com");
+        // Must end with the base domain
+        assert!(result.ends_with(".host.com"), "got: {result}");
+        // Must not contain the literal wildcard character
+        assert!(!result.contains('*'), "got: {result}");
+        // The label before the first dot must be non-empty
+        let label = result.split('.').next().unwrap();
+        assert!(!label.is_empty(), "empty label in: {result}");
+        // Label should be 8 hex chars (first 8 of UUID simple)
+        assert_eq!(label.len(), 8, "expected 8-char label, got: {label}");
+    }
+
+    #[test]
+    fn probe_host_wildcard_is_random() {
+        // Two calls should produce different labels (probability of collision: 1/16^8 ≈ 0).
+        let a = probe_host("*.host.com");
+        let b = probe_host("*.host.com");
+        assert_ne!(a, b, "expected different labels per call");
     }
 
     #[test]

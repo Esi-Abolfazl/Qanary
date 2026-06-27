@@ -1,7 +1,7 @@
 // Mirror of the Rust types in `src-tauri/src/models.rs`. Keep the two in sync.
 // serde serialises the enums in lowercase, so these are lowercase string unions.
 
-export type ServiceState = "up" | "blocked" | "down" | "checking";
+export type ServiceState = "up" | "reachable" | "blocked" | "down" | "checking";
 export type Severity = "green" | "yellow" | "red";
 
 // ----- Runtime snapshot (read-only, pushed from the backend) -----

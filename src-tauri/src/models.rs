@@ -211,9 +211,9 @@ impl Default for Config {
                         Endpoint::new("api2.cursor.sh", 443),
                         Endpoint::new("api3.cursor.sh", 443),
                         Endpoint::new("api4.cursor.sh", 443),
-                        Endpoint::new("api5.cursor.sh", 443),
+                        Endpoint::new("*.api5.cursor.sh", 443),
                         Endpoint::new("repo42.cursor.sh", 443),
-                        Endpoint::new("authentication.cursor.sh", 443),
+                        Endpoint::new("*.authentication.cursor.sh", 443),
                         Endpoint::new("authenticator.cursor.sh", 443),
                         Endpoint::new("marketplace.cursorapi.com", 443),
                         Endpoint::new("cursor-cdn.com", 443),
@@ -259,8 +259,13 @@ impl Default for Config {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "lowercase")]
 pub enum ServiceState {
-    /// Reachable: TCP connected and the server answered an HTTPS request.
+    /// Up: TCP connected and the server answered an HTTPS request.
     Up,
+    /// Reachable (TCP only): TCP connected, but the HTTPS layer was *not* checked.
+    /// Used for wildcard endpoints, where a synthesised random subdomain almost always
+    /// fails TLS (no matching cert) even though the zone is reachable — so probing TLS
+    /// would falsely read as Blocked. We confirm TCP and stop. No latency is recorded.
+    Reachable,
     /// TCP connected but the TLS/HTTP layer failed — likely interception.
     Blocked,
     /// No route: DNS/TCP failed or timed out.
@@ -276,14 +281,19 @@ impl ServiceState {
         matches!(self, ServiceState::Blocked | ServiceState::Down)
     }
 
-    /// Numeric rank for worst-wins comparison: higher = worse.
-    /// down(3) > blocked(2) > checking(1) > up(0)
+    /// Display priority for worst-wins rollup: higher = shown.
+    /// down(4) > blocked(3) > checking(2) > up(1) > reachable(0)
+    /// Failures and Checking dominate as usual. Among settled non-failures, `up` beats
+    /// `reachable`: a single fully-verified HTTPS endpoint promotes the Service dot to
+    /// green — the blue (TCP-only wildcard) dot shows only when *every* endpoint is
+    /// reachable-but-unverified.
     fn rank(self) -> u8 {
         match self {
-            ServiceState::Up => 0,
-            ServiceState::Checking => 1,
-            ServiceState::Blocked => 2,
-            ServiceState::Down => 3,
+            ServiceState::Reachable => 0,
+            ServiceState::Up => 1,
+            ServiceState::Checking => 2,
+            ServiceState::Blocked => 3,
+            ServiceState::Down => 4,
         }
     }
 }

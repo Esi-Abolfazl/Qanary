@@ -22,6 +22,9 @@
   /* Heat axis up -> blocked -> down. `blocked` is amber-orange, NOT yellow,
    * so canary yellow is free for the brand. See ADR-0006. */
   --state-up: #1fb872;
+  /* TCP-only reachable (wildcard zones): blue — distinct from the up→blocked→down
+   * heat axis, signalling "reachable but HTTPS not verified". */
+  --state-reachable: #3b82f6;
   --state-blocked: #f2792b;
   --state-down: #e03131;
   --state-checking: #8b93a3;

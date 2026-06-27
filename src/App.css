@@ -542,6 +542,12 @@ body {
   box-shadow: 0 0 0 3px color-mix(in srgb, var(--state-up) 22%, transparent);
   animation: qbreathe 2.4s ease-in-out infinite;
 }
+.dot-reachable::after {
+  background: var(--state-reachable);
+  box-shadow: 0 0 0 3px
+    color-mix(in srgb, var(--state-reachable) 20%, transparent);
+  animation: qbreathe 2.4s ease-in-out infinite;
+}
 .dot-blocked::after {
   background: var(--state-blocked);
   box-shadow: 0 0 0 3px

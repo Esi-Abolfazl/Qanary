@@ -18,8 +18,8 @@ describe("parseHost", () => {
     expect(parseHost("docs.google.com")).toBe("docs.google.com");
   });
 
-  it("strips wildcard subdomain", () => {
-    expect(parseHost("*.google.com")).toBe("google.com");
+  it("preserves wildcard host prefix (resolved at probe time)", () => {
+    expect(parseHost("*.google.com")).toBe("*.google.com");
   });
 
   it("strips wildcard path", () => {

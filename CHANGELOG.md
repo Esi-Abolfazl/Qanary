@@ -8,11 +8,16 @@ heading) become that release's notes. Dev-log-only subsections (`## Internal`, `
 `## Development`, `## Chore`, `## CI`, `## Build`, `## More info`) appear on the GitHub
 release page but are hidden from the in-app "What's new" modal.
 
-## [0.5.5]
+## [0.5.6]
 
 ## What's new
 
 - Export & import your config — back up your lists and settings to a `.json` file, or move them to another machine, from the new Config section at the top of Settings. Importing replaces your current setup and asks you to confirm first.
+- Wildcard endpoints — add a host as `*.example.com` and Qanary keeps it as one endpoint, probing a fresh random subdomain of the zone each round instead of the often-dead bare domain. This reflects whether the wildcard zone is actually reachable.
+- Wildcard endpoints are checked at the TCP layer only — their certificate can't be verified for a made-up subdomain — so they show a blue "reachable" dot with a "TCP only" note in place of a latency. A service that mixes normal and wildcard endpoints stays green as long as its normal endpoints are up.
+
+## Note
+- Upgrading? Wildcard endpoints only apply to newly added services. To pick up the updated default list, reset to default from the Settings menu — note this clears any lists or services you added yourself.
 
 ## Internal
 
@@ -20,7 +25,7 @@ release page but are hidden from the in-app "What's new" modal.
 
 ## More info
 
-- [ADR 0019 — versioned config schema + JSON export/import](https://github.com/Esi-Abolfazl/Qanary/blob/main/docs/adr/0019-config-export-import-migration.md).
+- [ADR 0019 — versioned config schema + JSON export/import](https://github.com/Esi-Abolfazl/Qanary/blob/main/docs/adr/0019-config-export-import-migration.md),[ADR 0020 — wildcard endpoint probing](https://github.com/Esi-Abolfazl/Qanary/blob/main/docs/adr/0020-wildcard-endpoint-probing.md), [ADR 0021 — TCP-only reachable state for wildcards](https://github.com/Esi-Abolfazl/Qanary/blob/main/docs/adr/0021-wildcard-tcp-only-reachable-state.md).
 
 ## [0.5.3]
 

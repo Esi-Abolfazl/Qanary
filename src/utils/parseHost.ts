@@ -1,19 +1,20 @@
 /**
  * Normalise any messy host string into a clean `host` or `host/path`.
  *
- * Handles: markdown links, https://, http://, www., *.  (wildcard), /*, trailing slashes.
- * Subdomains (docs.google.com) and paths (google.com/inbox) are preserved.
+ * Handles: markdown links, https://, http://, www., /*, trailing slashes.
+ * Wildcard host prefixes (`*.`) are preserved — the backend synthesises a concrete
+ * subdomain at probe time. Subdomains and paths are also preserved.
  *
  * Examples:
  *   "[https://google.com/](https://goog.com/)" → "goog.com"
  *   "https://www.google.com/"                  → "google.com"
- *   "*.google.com"                             → "google.com"
+ *   "*.google.com"                             → "*.google.com"  (preserved)
  *   "google.com/*"                             → "google.com"
  *   "docs.google.com"                          → "docs.google.com"
  *   "google.com/inbox"                         → "google.com/inbox"
  */
 /** Parse a user-entered host string that may contain an inline port (e.g. `google.com:8080`).
- *  Runs parseHost first to strip scheme/www/wildcards, then splits on the trailing `:port`.
+ *  Runs parseHost first to strip scheme/www/path wildcards, then splits on the trailing `:port`.
  *  Port is clamped to 1–65535; out-of-range → undefined (caller defaults to 443). */
 export function splitHostPort(raw: string): { host: string; port: number | undefined } {
   const cleaned = parseHost(raw);
@@ -32,7 +33,6 @@ export function parseHost(raw: string): string {
   if (md) s = md[1].trim();
   s = s.replace(/^https?:\/\//i, "").replace(/^\/\//, ""); // strip scheme (case-insensitive)
   s = s.replace(/^www\./, "");                             // strip www.
-  s = s.replace(/^\*\./, "");                              // strip wildcard subdomain
   s = s.replace(/\/\*$/, "");                              // strip wildcard path
   s = s.replace(/\/$/, "");                                // strip trailing slash
   return s;
