@@ -368,6 +368,8 @@ mod tests {
             down_sound: true,
             up_notify: false,
             up_sound: true,
+            blocked_notify: true,
+            blocked_sound: true,
             hide_dock: false,
             last_changelog_version: None,
         };

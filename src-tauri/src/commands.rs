@@ -154,6 +154,8 @@ pub fn update_settings(
     down_sound: Option<bool>,
     up_notify: Option<bool>,
     up_sound: Option<bool>,
+    blocked_notify: Option<bool>,
+    blocked_sound: Option<bool>,
 ) -> Config {
     mutate(&app, |cfg| {
         if let Some(v) = critical_interval_secs {
@@ -186,6 +188,12 @@ pub fn update_settings(
         }
         if let Some(v) = up_sound {
             cfg.up_sound = v;
+        }
+        if let Some(v) = blocked_notify {
+            cfg.blocked_notify = v;
+        }
+        if let Some(v) = blocked_sound {
+            cfg.blocked_sound = v;
         }
     })
 }

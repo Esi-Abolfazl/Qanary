@@ -156,6 +156,15 @@ pub struct Config {
     /// Sound on a critical-list recovery. Default on.
     #[serde(default = "default_true")]
     pub up_sound: bool,
+    /// Native notification when a critical list goes fully blocked (every endpoint
+    /// is `Blocked` = whole-list TLS interception / filtering). Default on.
+    /// Additive field — older configs load with `blocked_notify = true` via serde default.
+    #[serde(default = "default_true")]
+    pub blocked_notify: bool,
+    /// Sound on a critical-list fully-blocked alert. Reuses the down sound asset.
+    /// Default on. Additive — older configs load with `blocked_sound = true`.
+    #[serde(default = "default_true")]
+    pub blocked_sound: bool,
     /// Hide the Dock icon — run as a tray/menu-bar-only app. macOS only; default off.
     #[serde(default)]
     pub hide_dock: bool,
@@ -244,6 +253,8 @@ impl Default for Config {
             down_sound: true,
             up_notify: false,
             up_sound: true,
+            blocked_notify: true,
+            blocked_sound: true,
             hide_dock: false,
             last_changelog_version: None,
         }

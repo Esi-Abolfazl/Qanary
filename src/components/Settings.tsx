@@ -105,6 +105,8 @@ export function Settings({
     downSound: boolean,
     upNotify: boolean,
     upSound: boolean,
+    blockedNotify: boolean,
+    blockedSound: boolean,
   ) => void;
   onShowReleaseNotes: () => void;
   onImport: (path: string) => void;
@@ -117,6 +119,8 @@ export function Settings({
   const [downSound, setDownSound] = useState(true);
   const [upNotify, setUpNotify] = useState(false);
   const [upSound, setUpSound] = useState(true);
+  const [blockedNotify, setBlockedNotify] = useState(true);
+  const [blockedSound, setBlockedSound] = useState(true);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateState, setUpdateState] = useState<UpdateState>("idle");
   const [version, setVersion] = useState("");
@@ -151,6 +155,8 @@ export function Settings({
     setDownSound(config.down_sound);
     setUpNotify(config.up_notify);
     setUpSound(config.up_sound);
+    setBlockedNotify(config.blocked_notify);
+    setBlockedSound(config.blocked_sound);
     setHideDockState(config.hide_dock);
     setHideDockError(null);
     setLoginError(null);
@@ -223,6 +229,8 @@ export function Settings({
       downSound,
       upNotify,
       upSound,
+      blockedNotify,
+      blockedSound,
     );
     onClose();
   }
@@ -393,7 +401,10 @@ export function Settings({
                 <span className="alert-grid-head">Notify</span>
                 <span className="alert-grid-head">Sound</span>
 
-                <span className="alert-grid-row-label">Outage (down)</span>
+                <span className="alert-grid-row-label">
+                  <span className="alert-dot alert-dot-down" />
+                  Outage (down)
+                </span>
                 <input
                   type="checkbox"
                   checked={downNotify}
@@ -405,7 +416,10 @@ export function Settings({
                   onChange={(e) => setDownSound(e.target.checked)}
                 />
 
-                <span className="alert-grid-row-label">Recovery (up)</span>
+                <span className="alert-grid-row-label">
+                  <span className="alert-dot alert-dot-up" />
+                  Recovery (up)
+                </span>
                 <input
                   type="checkbox"
                   checked={upNotify}
@@ -415,6 +429,21 @@ export function Settings({
                   type="checkbox"
                   checked={upSound}
                   onChange={(e) => setUpSound(e.target.checked)}
+                />
+
+                <span className="alert-grid-row-label">
+                  <span className="alert-dot alert-dot-blocked" />
+                  Blocked list
+                </span>
+                <input
+                  type="checkbox"
+                  checked={blockedNotify}
+                  onChange={(e) => setBlockedNotify(e.target.checked)}
+                />
+                <input
+                  type="checkbox"
+                  checked={blockedSound}
+                  onChange={(e) => setBlockedSound(e.target.checked)}
                 />
               </div>
             </fieldset>

@@ -91,6 +91,10 @@ export interface Config {
   down_sound: boolean;
   up_notify: boolean;
   up_sound: boolean;
+  /** Notify when a critical list goes fully blocked (whole-list TLS interception). */
+  blocked_notify: boolean;
+  /** Sound on a fully-blocked alert (reuses the down sound asset). */
+  blocked_sound: boolean;
   hide_dock: boolean;
   last_changelog_version: string | null;
 }

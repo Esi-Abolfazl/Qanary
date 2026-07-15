@@ -1212,6 +1212,27 @@ body {
 
 .alert-grid-row-label {
   justify-self: start;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Small status dot before each alert row label — ties the row to its dot color
+ * in the service list (down = red, up = green, blocked = amber). */
+.alert-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  flex: 0 0 auto;
+}
+.alert-dot-down {
+  background: var(--state-down);
+}
+.alert-dot-up {
+  background: var(--state-up);
+}
+.alert-dot-blocked {
+  background: var(--state-blocked);
 }
 
 /* ---------- Update section (Settings footer) ---------- */

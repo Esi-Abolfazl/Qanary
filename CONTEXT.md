@@ -43,9 +43,37 @@ _Avoid_: status, health
 
 **Transition**:
 A change in a **critical** List's `all_down` between two consecutive snapshots:
-`false→true` is an **outage**, `true→false` is a **recovery**. The only events that fire
-a notification + sound. Non-critical Lists and per-Service flips do not transition.
+`false→true` is an **outage**, `true→false` is a **recovery**. Fires the outage/recovery
+notification + sound. Non-critical Lists and per-Service flips do not transition. (No longer the
+*only* notification event — see Blocked-list alert.)
 _Avoid_: change, flip, event (when you mean this specific critical-List crossing)
+
+**Fully blocked**:
+A List whose every Service has every Endpoint in `blocked` state — the whole List is
+TCP-reachable but TLS-intercepted (filtering / censorship), distinct from a List that is
+`all_down` via real `down` (no route). A subset of `all_down`. Computed in the Frontend from
+the snapshot's Endpoint states.
+_Avoid_: all-blocked, censored (when you mean this exact every-Endpoint-blocked rollup)
+
+**Cut off**:
+The app-wide situation where **no Service anywhere has a verified `up` Endpoint** — every
+Service is failing (`blocked`/`down`) or wildcard-`reachable`-only, with at least one real
+`blocked`/`down`. Means "you can't reach anything" (total censorship cut-off, or wifi off
+where a local proxy/VPN still completes the TCP handshake so failures read `blocked` not
+`down`). Forces overall Severity `red` and a distinct "offline" hero headline, overriding the
+per-Endpoint `blocked`/`down` distinction (meaningless when nothing is reachable). Distinct
+from **Fully blocked** (one List, TLS-intercepted) — Cut off is the whole app and admits
+`down` too.
+_Avoid_: offline (bare — the copy word, not the rule), all-down (that is the per-List rollup)
+
+**Blocked-list alert**:
+An opt-in notification (toggle `blocked_notify`, default on) fired when a **non-critical** List
+transitions into **Fully blocked**. Has its own sound toggle (`blocked_sound`, default on) that
+reuses the down sound asset. Critical Lists are excluded — they
+already alarm via the `all_down` Transition. Down-direction only (no blocked-recovery alert).
+Exists because a non-critical List going fully blocked is a real "you're being filtered" signal,
+whereas the same List going fully `down` is usually local-connectivity noise kept silent.
+_Avoid_: blocked notification (bare), outage (reserve outage for the critical-List Transition)
 
 **Service probe task**:
 One independent async task per enabled Service, owning that Service's probe cadence and

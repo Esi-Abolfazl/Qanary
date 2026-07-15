@@ -18,8 +18,15 @@
 - [x] Export / import config (JSON file picker) — native save/open dialog; Config card at top of Settings (standalone, outside the Save form); import guarded by an overwrite-confirmation modal (ADR-0019)
 - [x] DB/config migration system: versioned schema so each new version's config changes apply automatically for existing users on upgrade — integer `schema_version` + numbered `store::migrate` runner (ADR-0019)
 - [x] Wildcard endpoint probing (`*.host.com` → probe resolved subdomain)
-- [ ] Block-page detection via content heuristics (HTTP 200 but wrong content)
+- [ ] Endpoint-status detection: classify by HTTP status code (403/401/500 + any error-range response) as a distinct blocked/degraded state, not just TCP/HTTPS reachability. Block-page content heuristics (HTTP 200 but wrong body) out of scope — not a problem for now.
 - [ ] Probe accuracy (own plan): confirm-before-flip (require K consecutive failures before showing Down — kill transient false outages); backoff on success only (keep fast retries while Down so recovery shows quickly, back off only stable-Up services); HEAD→GET fallback. Separate from the per-Service probe-task rewrite (`.claude/plans/2026-06-25-probe-system-rewrite-per-service-tasks.md`), which keeps `classify` verbatim and only changes scheduling.
+- [ ] Anonymous usage analytics — platform/OS split, app version, install/usage counts. Nothing wired yet; decisions below, all reversible. Needs an ADR (next: 0022) when picked up.
+  - **Backend: Aptabase, not Google Analytics.** GA is web-only (needs the Measurement Protocol for desktop) *and* `google-analytics.com` is blocked in Iran — our target audience — so GA would silently undercount exactly the blocked users we most care about. Aptabase is open-source, Tauri-native, privacy-first: no PII, no cookies, no device IDs; it hashes client IP + per-app salt server-side and discards every 24h; GDPR/CCPA/PECR compliant.
+  - **Integration:** official `tauri-plugin-aptabase` (`Cargo.toml`) + `@aptabase/tauri` (JS), register `aptabase:allow-track-event` in the ACL. Plugin auto-attaches OS + app version; sends nothing on its own — every event is a manual `trackEvent(name, props)` (props ≤125 chars).
+  - **Hosting: Aptabase Cloud (EU) free tier to start.** Risk: the ingestion endpoint may itself be filtered for some Iran users → those events lost (undercount); acceptable for rough metrics.
+    - [ ] (optional, later) Self-host Aptabase on our own domain (Docker Compose) for full control + a sink we trust. Revisit once cloud proves events actually arrive from real users.
+  - **Consent: disclosed, always-on, no in-app toggle** (document in README + privacy note). ⚠️ Reconsider before shipping: an always-on outbound beacon from a censorship tool is itself a signal and gives the user no control — opt-in (off by default, one Settings toggle) is the more defensible default for this audience.
+  - **"Install count" caveat:** Aptabase's anonymous model counts daily sessions / active users, **not** lifetime installs (the user hash resets every 24h). For a true lifetime install count, generate a random install UUID stored in `config.json` and send it as an event property.
 
 
 ### Optional features

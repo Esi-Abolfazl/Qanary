@@ -64,6 +64,8 @@ export const updateSettings = (
   downSound?: boolean,
   upNotify?: boolean,
   upSound?: boolean,
+  blockedNotify?: boolean,
+  blockedSound?: boolean,
 ) =>
   invoke<Config>("update_settings", {
     criticalIntervalSecs: criticalIntervalSecs ?? null,
@@ -74,6 +76,8 @@ export const updateSettings = (
     downSound: downSound ?? null,
     upNotify: upNotify ?? null,
     upSound: upSound ?? null,
+    blockedNotify: blockedNotify ?? null,
+    blockedSound: blockedSound ?? null,
   });
 
 /** Toggle the macOS Dock icon. Persists + applies live; no-op on non-macOS. */

@@ -12,8 +12,8 @@ import { ChangelogModal } from "./components/ChangelogModal";
 import { serviceToText } from "./utils/parseServices";
 import { checkForUpdate, downloadUpdate, installAndRelaunch } from "./update";
 import { nextUpdatePhase } from "./utils/updateCheck";
-import { criticalTransitions } from "./utils/transitions";
-import { fireAlert, type Dir } from "./utils/alerts";
+import { criticalTransitions, blockedTransitions } from "./utils/transitions";
+import { effectiveDir, fireAlert, type Dir } from "./utils/alerts";
 import { mergeDelta } from "./utils/mergeDelta";
 import {
   DndContext,
@@ -127,22 +127,33 @@ function App() {
 
     const downNames: string[] = [];
     const upNames: string[] = [];
+    const blockedNames: string[] = [];
     for (const { name, dir } of pending.values()) {
-      (dir === "down" ? downNames : upNames).push(name);
+      const eff = effectiveDir(dir, configRef.current);
+      if (eff === "down") downNames.push(name);
+      else if (eff === "up") upNames.push(name);
+      else blockedNames.push(name); // "blocked"
     }
     fireAlert("down", downNames, allDown, configRef.current);
     fireAlert("up", upNames, allUp, configRef.current);
+    fireAlert("blocked", blockedNames, false, configRef.current);
   }
 
   function handleSnapshot(s: Snapshot) {
     const prev = prevSnapshotRef.current;
     if (prev !== null) {
+      // Critical-list outage / recovery transitions.
       const transitions = criticalTransitions(prev.lists, s.lists);
-      for (const t of transitions) {
+      // Critical list entering fully-blocked (TLS interception) transitions.
+      // Spread order matters: blocked comes last so it overwrites a same-batch
+      // "down" edge for the same list in pendingRef (blocked is more specific).
+      const blocked = blockedTransitions(prev.lists, s.lists);
+      const all = [...transitions, ...blocked];
+      for (const t of all) {
         pendingRef.current.set(t.id, { name: t.name, dir: t.dir });
       }
       // Open one window from the first Transition; later ones join the same batch.
-      if (transitions.length > 0 && timerRef.current === null) {
+      if (all.length > 0 && timerRef.current === null) {
         timerRef.current = window.setTimeout(flushAlerts, ALERT_WINDOW_MS);
       }
     }
@@ -408,7 +419,7 @@ function App() {
         config={config}
         open={modal?.kind === "settings"}
         onClose={() => setModal(null)}
-        onSave={(criticalInterval, noncriticalInterval, providers, downNotify, downSound, upNotify, upSound) =>
+        onSave={(criticalInterval, noncriticalInterval, providers, downNotify, downSound, upNotify, upSound, blockedNotify, blockedSound) =>
           api
             .updateSettings(
               criticalInterval,
@@ -419,6 +430,8 @@ function App() {
               downSound,
               upNotify,
               upSound,
+              blockedNotify,
+              blockedSound,
             )
             .then(setConfig)
         }
