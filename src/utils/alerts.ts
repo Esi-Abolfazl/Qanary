@@ -85,3 +85,19 @@ export function fireAlert(
     void new Audio(dir === "up" ? upSfx : downSfx).play().catch(() => {});
   }
 }
+
+/**
+ * Fire the cut-off ("you're offline") alert. Reuses the down notify/sound gate and the down
+ * sound asset — there's no separate setting for it (see plan §3). Unlike `fireAlert`, this
+ * isn't keyed by list names: cut-off is a listless, app-wide event with its own fixed copy, so
+ * it bypasses `buildMessage` and the batched `pendingRef` pipeline entirely (App.tsx fires this
+ * directly on the false→true edge).
+ */
+export function fireCutOffAlert(config: Config | null): void {
+  if (config?.down_notify) {
+    void notify("You're offline", "Can't reach anything — check your connection.");
+  }
+  if (config?.down_sound) {
+    void new Audio(downSfx).play().catch(() => {});
+  }
+}

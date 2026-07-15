@@ -59,6 +59,7 @@ const SNAPSHOT: Snapshot = {
   ],
   overall: "green",
   wan: { ip: "1.2.3.4", country_code: "US", country_name: "United States", flag_emoji: "🇺🇸" },
+  cut_off: false,
 };
 
 const CONFIG: Config = {
@@ -72,6 +73,8 @@ const CONFIG: Config = {
   down_sound: false,
   up_notify: false,
   up_sound: false,
+  blocked_notify: false,
+  blocked_sound: false,
   hide_dock: false,
   last_changelog_version: null,
 };
@@ -209,6 +212,55 @@ describe("App", () => {
     // TCP-only note shown in place of latency, and the dot carries the reachable title.
     expect(screen.getByText("TCP only")).toBeInTheDocument();
     expect(screen.getByTitle(/reachable \(tcp only\)/i)).toBeInTheDocument();
+  });
+
+  it("cut-off shows the offline headline and marks the shared ancestor for all-red dots", async () => {
+    render(<App />);
+    await waitFor(() => screen.getByText("All clear"));
+    const handleSnapshot = vi.mocked(api.onStatusUpdate).mock.calls[0][0];
+
+    handleSnapshot({ ...SNAPSHOT, cut_off: true });
+
+    expect(await screen.findByText("You're offline")).toBeInTheDocument();
+    expect(screen.getByText("Can't reach anything — check your connection.")).toBeInTheDocument();
+    // The class lives on the shared ancestor (main.app), not the header, so the
+    // .cut-off CSS override reaches ServiceRow's dots too (see App.css).
+    expect(document.querySelector("main.app.cut-off")).not.toBeNull();
+  });
+
+  it("cut-off fires exactly one down notification on entry, silent on recovery/first-load", async () => {
+    const { sendNotification } = await import("@tauri-apps/plugin-notification");
+    vi.mocked(api.getConfig).mockResolvedValue({ ...CONFIG, down_notify: true });
+
+    render(<App />);
+    await waitFor(() => screen.getByText("All clear"));
+    // "All clear" only proves the snapshot fetch settled — api.getConfig() resolves
+    // independently, and fireCutOffAlert reads config off a ref updated by its own
+    // effect. Flush a macrotask tick so that ref is populated before driving cut-off.
+    await new Promise((r) => setTimeout(r, 0));
+
+    // The initial getSnapshot() load already ran handleSnapshot once (prev === null →
+    // silent). Grab that same handler off the onStatusUpdate subscription to drive
+    // further snapshots, mirroring how a real status-update event would land.
+    const handleSnapshot = vi.mocked(api.onStatusUpdate).mock.calls[0][0];
+
+    // false → true: fires once.
+    handleSnapshot({ ...SNAPSHOT, cut_off: true });
+    await waitFor(() =>
+      expect(sendNotification).toHaveBeenCalledWith({
+        title: "You're offline",
+        body: "Can't reach anything — check your connection.",
+      }),
+    );
+    expect(sendNotification).toHaveBeenCalledTimes(1);
+
+    // true → true: no change, stays silent.
+    handleSnapshot({ ...SNAPSHOT, cut_off: true });
+    expect(sendNotification).toHaveBeenCalledTimes(1);
+
+    // true → false: recovery, stays silent.
+    handleSnapshot({ ...SNAPSHOT, cut_off: false });
+    expect(sendNotification).toHaveBeenCalledTimes(1);
   });
 
   it("Import confirmation Cancel aborts without calling importConfig", async () => {

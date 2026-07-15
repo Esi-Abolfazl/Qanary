@@ -42,6 +42,8 @@ export interface Snapshot {
   lists: ListStatus[];
   overall: Severity;
   wan: WanInfo | null;
+  /** True when no Endpoint anywhere is reachable — see `probe::is_cut_off` in the backend. */
+  cut_off: boolean;
 }
 
 /**
@@ -54,6 +56,7 @@ export interface ServiceDelta {
   service: ServiceStatus;
   list_all_down: boolean;
   overall: Severity;
+  cut_off: boolean;
 }
 
 // ----- Persisted config (returned by mutation commands) -----

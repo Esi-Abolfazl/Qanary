@@ -39,6 +39,7 @@ export const SNAPSHOT: Snapshot = {
     country_name: "United States",
     flag_emoji: "🇺🇸",
   },
+  cut_off: false,
 };
 
 export const CONFIG: Config = {
@@ -52,6 +53,8 @@ export const CONFIG: Config = {
   down_sound: false,
   up_notify: false,
   up_sound: false,
+  blocked_notify: false,
+  blocked_sound: false,
   hide_dock: false,
   last_changelog_version: null,
 };

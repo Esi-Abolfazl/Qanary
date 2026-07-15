@@ -10,10 +10,10 @@
     "preview": "vite preview",
     "app:dev": "tauri dev",
     "app:build": "tauri build",
-    "check": "tsc --noEmit",
+    "check": "tsc --noEmit && tsc --noEmit -p tsconfig.tests.json",
     "test:ui": "vitest run",
     "test:rust": "cd src-tauri && cargo test",
-    "test": "pnpm test:ui && pnpm test:rust",
+    "test": "pnpm check && pnpm test:ui && pnpm test:rust",
     "test:e2e": "playwright test"
   },
   "dependencies": {

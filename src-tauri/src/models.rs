@@ -384,6 +384,9 @@ pub struct Snapshot {
     pub lists: Vec<ListStatus>,
     pub overall: Severity,
     pub wan: Option<WanInfo>,
+    /// True when no Endpoint anywhere is reachable — see `probe::is_cut_off`. Forces `overall`
+    /// to Red and tells the frontend to render the "offline" hero + all-red dots.
+    pub cut_off: bool,
 }
 
 /// A per-Service push (a **Status delta**): the instant a Service probe task's probe lands it
@@ -395,4 +398,5 @@ pub struct ServiceDelta {
     pub service: ServiceStatus,
     pub list_all_down: bool,
     pub overall: Severity,
+    pub cut_off: bool,
 }

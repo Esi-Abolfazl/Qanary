@@ -3,13 +3,14 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // Mock notify to prevent Tauri plugin-notification from loading
 vi.mock("./notify", () => ({ notify: vi.fn().mockResolvedValue(undefined) }));
 
-import { buildMessage, effectiveDir, fireAlert } from "./alerts";
+import { buildMessage, effectiveDir, fireAlert, fireCutOffAlert } from "./alerts";
 import type { Config } from "../types";
 import { notify } from "./notify";
 
 const mockNotify = vi.mocked(notify);
 
 const baseConfig: Config = {
+  schema_version: 1,
   lists: [],
   critical_interval_secs: 20,
   noncritical_interval_secs: 60,
@@ -144,6 +145,42 @@ describe("buildMessage (blocked direction)", () => {
       title: "Blocked",
       body: "A and B appear blocked.",
     });
+  });
+});
+
+describe("fireCutOffAlert", () => {
+  beforeEach(() => {
+    mockNotify.mockClear();
+    vi.stubGlobal("Audio", class { play() { return Promise.resolve(); } });
+  });
+
+  it("fires the fixed offline copy when down_notify=true", () => {
+    fireCutOffAlert(baseConfig);
+    expect(mockNotify).toHaveBeenCalledWith(
+      "You're offline",
+      "Can't reach anything — check your connection.",
+    );
+  });
+
+  it("no notify when down_notify=false", () => {
+    fireCutOffAlert({ ...baseConfig, down_notify: false });
+    expect(mockNotify).not.toHaveBeenCalled();
+  });
+
+  it("null config → no notification (graceful)", () => {
+    fireCutOffAlert(null);
+    expect(mockNotify).not.toHaveBeenCalled();
+  });
+
+  it("plays the down sound when down_sound=true, silent when false", () => {
+    const play = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("Audio", class { play() { return play(); } });
+
+    fireCutOffAlert({ ...baseConfig, down_sound: false });
+    expect(play).not.toHaveBeenCalled();
+
+    fireCutOffAlert({ ...baseConfig, down_sound: true });
+    expect(play).toHaveBeenCalledTimes(1);
   });
 });
 

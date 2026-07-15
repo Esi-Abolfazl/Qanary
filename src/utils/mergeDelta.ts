@@ -21,5 +21,5 @@ export function mergeDelta(snap: Snapshot, d: ServiceDelta): Snapshot {
   const lists = snap.lists.slice();
   lists[listIdx] = newList;
 
-  return { ...snap, lists, overall: d.overall };
+  return { ...snap, lists, overall: d.overall, cut_off: d.cut_off };
 }

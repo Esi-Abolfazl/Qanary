@@ -13,7 +13,7 @@ import { serviceToText } from "./utils/parseServices";
 import { checkForUpdate, downloadUpdate, installAndRelaunch } from "./update";
 import { nextUpdatePhase } from "./utils/updateCheck";
 import { criticalTransitions, blockedTransitions } from "./utils/transitions";
-import { effectiveDir, fireAlert, type Dir } from "./utils/alerts";
+import { effectiveDir, fireAlert, fireCutOffAlert, type Dir } from "./utils/alerts";
 import { mergeDelta } from "./utils/mergeDelta";
 import {
   DndContext,
@@ -155,6 +155,13 @@ function App() {
       // Open one window from the first Transition; later ones join the same batch.
       if (all.length > 0 && timerRef.current === null) {
         timerRef.current = window.setTimeout(flushAlerts, ALERT_WINDOW_MS);
+      }
+      // Cut-off (total no-access) has no list id and its own fixed copy, so it fires
+      // directly here instead of joining the list-id-keyed pendingRef batch. Fire once
+      // on the false→true edge only; recovery and first load (prev === null, handled by
+      // the outer guard) stay silent.
+      if (!prev.cut_off && s.cut_off) {
+        fireCutOffAlert(configRef.current);
       }
     }
     prevSnapshotRef.current = s;
@@ -312,7 +319,7 @@ function App() {
   }
 
   return (
-    <main className="app">
+    <main className={`app${snapshot?.cut_off ? " cut-off" : ""}`}>
       <StatusHero
         snapshot={snapshot}
         onRefresh={() => api.refreshNow().then(setSnapshot)}

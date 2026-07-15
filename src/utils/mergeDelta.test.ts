@@ -21,11 +21,19 @@ function snap(): Snapshot {
     ],
     overall: "green",
     wan: null,
+    cut_off: false,
   };
 }
 
 function delta(over: Partial<ServiceDelta> = {}): ServiceDelta {
-  return { list_id: "l1", service: svc("b", "up"), list_all_down: false, overall: "green", ...over };
+  return {
+    list_id: "l1",
+    service: svc("b", "up"),
+    list_all_down: false,
+    overall: "green",
+    cut_off: false,
+    ...over,
+  };
 }
 
 describe("mergeDelta", () => {
@@ -50,6 +58,11 @@ describe("mergeDelta", () => {
   it("unknown service id → returns input unchanged", () => {
     const s = snap();
     expect(mergeDelta(s, delta({ service: svc("ghost", "down") }))).toBe(s);
+  });
+
+  it("propagates cut_off from the delta", () => {
+    const out = mergeDelta(snap(), delta({ cut_off: true }));
+    expect(out.cut_off).toBe(true);
   });
 
   it("does not mutate the input snapshot", () => {

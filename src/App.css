@@ -560,6 +560,16 @@ body {
 .dot-checking::after {
   background: var(--state-checking);
 }
+/* Cut off (total no-access, see is_cut_off / ADR-0024): Blocked vs Down vs Reachable is
+ * meaningless when nothing at all is reachable — every dot reads the same red. Partial
+ * connectivity never gets this class, so orange/blue/red stay distinct there. */
+.app.cut-off .dot-reachable::after,
+.app.cut-off .dot-blocked::after,
+.app.cut-off .dot-down::after {
+  background: var(--state-down);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--state-down) 18%, transparent);
+  animation: none;
+}
 /* Ping ring for checking state */
 .dot-checking::before {
   content: "";

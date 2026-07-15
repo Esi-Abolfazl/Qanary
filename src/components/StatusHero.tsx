@@ -10,7 +10,13 @@ import { useTheme, type ThemeMode } from "../theme";
 function severityCopy(
   overall: Severity,
   failingList: string | null,
+  cutOff: boolean,
 ): { head: string; sub: string } {
+  if (cutOff)
+    return {
+      head: "You're offline",
+      sub: "Can't reach anything — check your connection.",
+    };
   if (overall === "green")
     return { head: "All clear", sub: "Everything’s reachable." };
   if (overall === "yellow")
@@ -102,7 +108,7 @@ export function StatusHero({
   const overall: Severity = snapshot?.overall ?? "green";
   const wan = snapshot?.wan ?? null;
   const failingList = snapshot?.lists.find((l) => l.all_down)?.name ?? null;
-  const copy = severityCopy(overall, failingList);
+  const copy = severityCopy(overall, failingList, snapshot?.cut_off ?? false);
 
   const [menuOpen, setMenuOpen] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);

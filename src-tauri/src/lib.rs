@@ -41,6 +41,7 @@ pub fn emit_checking(app: &tauri::AppHandle) {
         lists: probe::checking_lists(&cfg),
         overall: models::Severity::Green,
         wan,
+        cut_off: false, // checking state is never cut-off — nothing has settled yet
     };
     *state.snapshot.lock().unwrap() = Some(snapshot.clone());
     let _ = app.emit(EVENT_STATUS, &snapshot);

@@ -1,0 +1,16 @@
+{
+  // Type-checks everything the app tsconfig excludes: unit/component specs,
+  // the vitest setup, and the Playwright e2e suite. The app config excludes
+  // them so `pnpm build` stays lean; without this file nothing type-checked
+  // them at all, and shared fixtures silently rotted as `Config` grew fields
+  // (schema_version, blocked_notify/blocked_sound). Run via `pnpm typecheck`.
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    // Specs assert on unused-looking intermediates; the strict unused checks
+    // are a source-code lint, not a test lint.
+    "noUnusedLocals": false,
+    "noUnusedParameters": false
+  },
+  "include": ["src", "e2e", "vitest.config.ts", "playwright.config.ts"],
+  "exclude": []
+}

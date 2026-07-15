@@ -117,9 +117,31 @@ async fn probe_endpoint(
     (classify(tcp_ok, http_ok), latency_ms)
 }
 
+/// True when the user can't reach **anything** — endpoint-granular across every List/Service:
+/// no Endpoint anywhere is `Up`, none is `Checking` (still settling), and at least one is
+/// `Blocked`/`Down`. A single live Endpoint disqualifies it, even if its Service dot rolled up
+/// to `Blocked` (see `ServiceState::rank`) — this predicate looks past the dot to the raw
+/// Endpoint states so a partial outage never misreports as total cut-off. Empty → false.
+pub fn is_cut_off(lists: &[ListStatus]) -> bool {
+    let endpoints: Vec<ServiceState> = lists
+        .iter()
+        .flat_map(|l| l.services.iter())
+        .flat_map(|s| s.endpoints.iter())
+        .map(|e| e.state)
+        .collect();
+
+    let any_up = endpoints.contains(&ServiceState::Up);
+    let any_checking = endpoints.contains(&ServiceState::Checking);
+    let any_failing = endpoints.iter().any(|s| s.is_failure());
+
+    !any_up && !any_checking && any_failing
+}
+
 /// Critical list fully down → Red; non-critical list fully down → Yellow; else Green.
+/// Cut-off (total no-access, see `is_cut_off`) overrides straight to Red — `Blocked` vs `Down`
+/// is meaningless once nothing at all is reachable.
 pub fn overall_severity(lists: &[ListStatus]) -> Severity {
-    if lists.iter().any(|l| l.all_down && l.critical) {
+    if is_cut_off(lists) || lists.iter().any(|l| l.all_down && l.critical) {
         Severity::Red
     } else if lists.iter().any(|l| l.all_down) {
         Severity::Yellow
@@ -431,5 +453,31 @@ mod tests {
         assert_eq!(overall_severity(&[list_status(&[&[Down, Down]]), list_status(&[&[Up]])]), Severity::Yellow);
         // All up → Green
         assert_eq!(overall_severity(&[list_status(&[&[Up]]), list_status(&[&[Up]])]), Severity::Green);
+    }
+
+    #[test]
+    fn is_cut_off_matrix() {
+        use ServiceState::*;
+        // Screenshot case: every real endpoint Blocked, one wildcard Reachable among them → true.
+        assert!(is_cut_off(&[list_status(&[&[Blocked, Blocked], &[Reachable]])]));
+        // Wifi-off: everything Down → true.
+        assert!(is_cut_off(&[list_status(&[&[Down, Down]]), list_status(&[&[Down]])]));
+        // One endpoint Up among failures → not cut off, even though its service dot is worse.
+        assert!(!is_cut_off(&[list_status(&[&[Down, Down]]), list_status(&[&[Up]])]));
+        // Any endpoint still Checking (mid-probe) → not cut off yet.
+        assert!(!is_cut_off(&[list_status(&[&[Down, Checking]])]));
+        // All Reachable, no real failure → not cut off (TCP reached something, wildcards can't
+        // verify HTTPS anyway).
+        assert!(!is_cut_off(&[list_status(&[&[Reachable, Reachable]])]));
+        // No endpoints at all → not cut off.
+        assert!(!is_cut_off(&[]));
+    }
+
+    #[test]
+    fn overall_severity_red_on_cut_off_even_when_non_critical() {
+        use ServiceState::*;
+        // Non-critical list, but every endpoint everywhere is Blocked/Down → cut off → Red,
+        // not the Yellow that a plain all_down non-critical list would get.
+        assert_eq!(overall_severity(&[list_status(&[&[Blocked, Down]])]), Severity::Red);
     }
 }

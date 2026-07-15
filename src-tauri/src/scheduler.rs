@@ -180,12 +180,15 @@ fn recompute_delta(snap: &mut Snapshot, list_id: &str, status: ServiceStatus) ->
 
     let overall = crate::probe::overall_severity(&snap.lists);
     snap.overall = overall;
+    let cut_off = crate::probe::is_cut_off(&snap.lists);
+    snap.cut_off = cut_off;
 
     Some(ServiceDelta {
         list_id: list_id.to_string(),
         service: status,
         list_all_down,
         overall,
+        cut_off,
     })
 }
 
@@ -360,6 +363,7 @@ mod tests {
             }],
             overall: Severity::Green,
             wan: None,
+            cut_off: false,
         }
     }
 
