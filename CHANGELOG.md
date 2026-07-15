@@ -8,6 +8,21 @@ heading) become that release's notes. Dev-log-only subsections (`## Internal`, `
 `## Development`, `## Chore`, `## CI`, `## Build`, `## More info`) appear on the GitHub
 release page but are hidden from the in-app "What's new" modal.
 
+## [0.6.0]
+
+## What's new
+
+- Blocked alert for critical lists — when every endpoint of a critical list turns blocked (the TLS-interception fingerprint), Qanary sends a dedicated "Blocked" notification instead of the generic outage one. Opt-out via the new toggle in Settings.
+- Cut-off detection — when nothing at all is reachable (no endpoint up anywhere), the app now reads a red "Offline" instead of a wall of orange dots. Total loss of connectivity is a red alarm, not a soft warning.
+
+## Fix
+
+- WAN IP now refreshes correctly after a network or VPN change — probes no longer reuse a connection bound to the old route, and a failed refetch retries quickly instead of waiting up to five minutes.
+
+## More info
+
+- [ADR 0023 — blocked-list notification](https://github.com/Esi-Abolfazl/Qanary/blob/main/docs/adr/0023-blocked-list-notification.md), [ADR 0024 — cut-off "offline" red escalation](https://github.com/Esi-Abolfazl/Qanary/blob/main/docs/adr/0024-cut-off-offline-red-escalation.md), [ADR 0025 — fresh WAN IP after network change](https://github.com/Esi-Abolfazl/Qanary/blob/main/docs/adr/0025-disable-idle-pooling-fresh-wan-ip.md).
+
 ## [0.5.6]
 
 ## What's new
