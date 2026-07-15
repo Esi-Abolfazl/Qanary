@@ -244,6 +244,22 @@ pub fn respawn_tasks(app: &AppHandle) {
 /// reusing the existing event + frontend listener, rather than inventing a WAN-specific delta.
 const WAN_REFRESH: Duration = Duration::from_secs(300);
 
+/// Retry cadence after a failed/empty WAN fetch (e.g. right after a network/VPN change, before
+/// the new route is ready) — much shorter than `WAN_REFRESH` so the header catches up in seconds
+/// instead of waiting out the full 5 min cycle.
+const WAN_RETRY: Duration = Duration::from_secs(10);
+
+/// How long to wait before the next WAN fetch, given whether the last one succeeded. Pure so it's
+/// unit-testable without an `AppHandle`. Keyed off the *fetch's* outcome, not whether a WAN IP is
+/// cached — a failed refetch must keep retrying fast even if an old IP is still on screen.
+pub fn next_wan_delay(last_ok: bool) -> Duration {
+    if last_ok {
+        WAN_REFRESH
+    } else {
+        WAN_RETRY
+    }
+}
+
 /// Spawn the single WAN task. Built once in `setup`.
 pub fn spawn_wan_task(app: &AppHandle) {
     let app = app.clone();
@@ -257,7 +273,11 @@ pub fn spawn_wan_task(app: &AppHandle) {
                 (state.client.clone(), cfg.ip_providers.clone())
             };
 
-            if let Some(info) = crate::wan::fetch_wan(&client, &providers).await {
+            // Capture the fetch's own outcome — this (not whether a WAN IP is cached) drives the
+            // next wait, so a failed post-change refetch keeps retrying fast (see next_wan_delay).
+            let fetched = crate::wan::fetch_wan(&client, &providers).await;
+            let last_ok = fetched.is_some();
+            if let Some(info) = fetched {
                 *app.state::<AppState>().wan.lock().unwrap() = Some(info);
             }
 
@@ -278,9 +298,8 @@ pub fn spawn_wan_task(app: &AppHandle) {
                 crate::tray::update_icon(&app, overall);
             }
 
-            // Refresh on schedule; retry sooner while WAN is still unknown; wake on manual refresh.
-            let known = app.state::<AppState>().wan.lock().unwrap().is_some();
-            let wait = if known { WAN_REFRESH } else { Duration::from_secs(10) };
+            // Refresh on schedule; retry sooner after a failed fetch; wake on manual refresh.
+            let wait = next_wan_delay(last_ok);
             tokio::select! {
                 _ = tokio::time::sleep(wait) => {}
                 _ = signal_rx.recv() => {}
@@ -330,6 +349,12 @@ mod tests {
     #[test]
     fn jitter_zero_interval_is_noop() {
         assert_eq!(jitter(Duration::ZERO), Duration::ZERO);
+    }
+
+    #[test]
+    fn next_wan_delay_picks_by_last_fetch_outcome() {
+        assert_eq!(next_wan_delay(true), WAN_REFRESH, "success → full 300s cadence");
+        assert_eq!(next_wan_delay(false), WAN_RETRY, "failure → short 10s retry");
     }
 
     // ----- delta rollup -----

@@ -75,6 +75,14 @@ Exists because a non-critical List going fully blocked is a real "you're being f
 whereas the same List going fully `down` is usually local-connectivity noise kept silent.
 _Avoid_: blocked notification (bare), outage (reserve outage for the critical-List Transition)
 
+**WAN info**:
+The egress identity shown in the header: current public/WAN IP address plus its geolocated
+country name, 2-letter code, and flag emoji. Resolved by the WAN task (try IP providers in
+order, then geolocate), on a slower cadence than Service probes and immediately on a
+network/VPN change. Must reflect the **current** default route at check time — a stale IP
+after a network change is a defect.
+_Avoid_: local IP, endpoint address (WAN info is the outward-facing egress IP, not an Endpoint's host)
+
 **Service probe task**:
 One independent async task per enabled Service, owning that Service's probe cadence and
 its last-known state. Tasks run concurrently (bounded by a shared concurrency limit), so

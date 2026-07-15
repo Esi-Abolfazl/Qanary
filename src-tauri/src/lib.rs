@@ -82,6 +82,10 @@ pub fn run() {
             let client = reqwest::Client::builder()
                 .timeout(HTTP_TIMEOUT)
                 .user_agent(concat!("Qanary/", env!("CARGO_PKG_VERSION")))
+                // No idle keep-alive: every probe HEAD / WAN GET opens a fresh connection over
+                // the *current* route, so a post-VPN/network-change request can't reuse a socket
+                // still bound to the old interface (ADR-0025).
+                .pool_max_idle_per_host(0)
                 .build()
                 .expect("build HTTP client");
 
