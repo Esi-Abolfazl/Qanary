@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 
 // Mock the entire api module — every fn returns sensible defaults below
@@ -75,6 +75,8 @@ const CONFIG: Config = {
   up_sound: false,
   blocked_notify: false,
   blocked_sound: false,
+  // Every *_sound flag is false here, so 0 is the consistent volume (see normalize_alerts).
+  notify_volume: 0,
   hide_dock: false,
   last_changelog_version: null,
 };
@@ -184,6 +186,82 @@ describe("App", () => {
     // Confirm → importConfig fires with the picked path.
     await user.click(screen.getByRole("button", { name: /overwrite/i }));
     expect(api.importConfig).toHaveBeenCalledWith("/tmp/picked-config.json");
+  });
+
+  // The Settings slider mirrors `store::normalize_alerts` for immediate feedback, so these
+  // assert the mirror agrees with the backend rule in both directions (ADR-0026).
+  describe("notification volume slider (mirror of normalize_alerts)", () => {
+    /** Open menu → Settings and return the slider + the three Sound checkboxes. */
+    async function openAlertSettings(user: ReturnType<typeof userEvent.setup>) {
+      render(<App />);
+      await waitFor(() => screen.getByText("All clear"));
+      await user.click(screen.getByRole("button", { name: /menu/i }));
+      await user.click(screen.getByRole("button", { name: /^settings$/i }));
+      return {
+        slider: screen.getByLabelText(/sound volume/i) as HTMLInputElement,
+        downSound: screen.getByRole("checkbox", { name: /sound on outage/i }),
+        upSound: screen.getByRole("checkbox", { name: /sound on recovery/i }),
+        blockedSound: screen.getByRole("checkbox", {
+          name: /sound on blocked list/i,
+        }),
+      };
+    }
+
+    it("is disabled at 0 when every Sound alert is off", async () => {
+      const { slider } = await openAlertSettings(userEvent.setup());
+      expect(slider).toBeDisabled();
+      expect(slider.value).toBe("0");
+      expect(screen.getByText(/enable a sound alert/i)).toBeInTheDocument();
+    });
+
+    it("jumps to 100 and enables when the first Sound box is checked", async () => {
+      const user = userEvent.setup();
+      const { slider, downSound } = await openAlertSettings(user);
+
+      await user.click(downSound);
+
+      expect(downSound).toBeChecked();
+      expect(slider).toBeEnabled();
+      expect(slider.value).toBe("100");
+
+      // ...and unchecking the last one drops back to 0 / disabled.
+      await user.click(downSound);
+      expect(downSound).not.toBeChecked();
+      expect(slider).toBeDisabled();
+      expect(slider.value).toBe("0");
+    });
+
+    it("setting the slider to 0 unchecks all three Sound boxes and saves notifyVolume: 0", async () => {
+      const user = userEvent.setup();
+      vi.mocked(api.updateSettings).mockResolvedValue(CONFIG);
+      const { slider, downSound, upSound, blockedSound } =
+        await openAlertSettings(user);
+
+      // Enable all three so there is something for volume 0 to clear.
+      await user.click(downSound);
+      await user.click(upSound);
+      await user.click(blockedSound);
+      expect(slider.value).toBe("100");
+
+      // Drag to 0 — fireEvent, since userEvent can't set a range slider's value directly.
+      fireEvent.change(slider, { target: { value: "0" } });
+
+      expect(downSound).not.toBeChecked();
+      expect(upSound).not.toBeChecked();
+      expect(blockedSound).not.toBeChecked();
+      expect(slider).toBeDisabled();
+
+      await user.click(screen.getByRole("button", { name: /^save$/i }));
+
+      // The persisted payload must carry the same consistent pair the backend would enforce:
+      // volume 0 with all three sound args false (args 5, 7, 9 are down/up/blocked sound).
+      const calls = vi.mocked(api.updateSettings).mock.calls;
+      const args = calls[calls.length - 1];
+      expect(args[10]).toBe(0); // notifyVolume
+      expect(args[5]).toBe(false); // downSound
+      expect(args[7]).toBe(false); // upSound
+      expect(args[9]).toBe(false); // blockedSound
+    });
   });
 
   it('wildcard endpoint renders blue "reachable" dot and "TCP only" note', async () => {

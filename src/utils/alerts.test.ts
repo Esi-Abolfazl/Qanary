@@ -22,9 +22,33 @@ const baseConfig: Config = {
   up_sound: false,
   blocked_notify: true,
   blocked_sound: false,
+  notify_volume: 100,
   hide_dock: false,
   last_changelog_version: null,
 };
+
+/**
+ * jsdom has no `Audio`. Stub it with a recorder so tests can assert both *whether* a sound was
+ * constructed (volume 0 must construct none) and at what `.volume` it played.
+ * Returns the list of constructed instances plus the shared `play` spy.
+ */
+function stubAudio() {
+  const instances: { src: string; volume: number }[] = [];
+  const play = vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal(
+    "Audio",
+    class {
+      volume = 1;
+      constructor(public src: string) {
+        instances.push(this as unknown as { src: string; volume: number });
+      }
+      play() {
+        return play();
+      }
+    },
+  );
+  return { instances, play };
+}
 
 describe("effectiveDir", () => {
   it("keeps blocked when blocked_notify is on", () => {
@@ -107,8 +131,7 @@ describe("buildMessage", () => {
 describe("fireAlert", () => {
   beforeEach(() => {
     mockNotify.mockClear();
-    // jsdom doesn't have Audio; stub it so fireAlert(sound=true) doesn't throw
-    vi.stubGlobal("Audio", class { play() { return Promise.resolve(); } });
+    stubAudio();
   });
 
   it("empty names → no notification", () => {
@@ -151,7 +174,7 @@ describe("buildMessage (blocked direction)", () => {
 describe("fireCutOffAlert", () => {
   beforeEach(() => {
     mockNotify.mockClear();
-    vi.stubGlobal("Audio", class { play() { return Promise.resolve(); } });
+    stubAudio();
   });
 
   it("fires the fixed offline copy when down_notify=true", () => {
@@ -173,8 +196,7 @@ describe("fireCutOffAlert", () => {
   });
 
   it("plays the down sound when down_sound=true, silent when false", () => {
-    const play = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal("Audio", class { play() { return play(); } });
+    const { play } = stubAudio();
 
     fireCutOffAlert({ ...baseConfig, down_sound: false });
     expect(play).not.toHaveBeenCalled();
@@ -187,7 +209,7 @@ describe("fireCutOffAlert", () => {
 describe("fireAlert (blocked direction)", () => {
   beforeEach(() => {
     mockNotify.mockClear();
-    vi.stubGlobal("Audio", class { play() { return Promise.resolve(); } });
+    stubAudio();
   });
 
   it("fires notify when blocked_notify=true", () => {
@@ -206,13 +228,73 @@ describe("fireAlert (blocked direction)", () => {
   });
 
   it("plays sound when blocked_sound=true, silent when false", () => {
-    const play = vi.fn().mockResolvedValue(undefined);
-    vi.stubGlobal("Audio", class { play() { return play(); } });
+    const { play } = stubAudio();
 
     fireAlert("blocked", ["Iran"], false, { ...baseConfig, blocked_sound: false });
     expect(play).not.toHaveBeenCalled();
 
     fireAlert("blocked", ["Iran"], false, { ...baseConfig, blocked_sound: true });
     expect(play).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("notify_volume (the gain path)", () => {
+  beforeEach(() => {
+    mockNotify.mockClear();
+  });
+
+  it("volume 0 constructs no Audio at all, even with down_sound on", () => {
+    const { instances, play } = stubAudio();
+    fireAlert("down", ["Internet"], false, {
+      ...baseConfig,
+      down_sound: true,
+      notify_volume: 0,
+    });
+    expect(instances).toHaveLength(0);
+    expect(play).not.toHaveBeenCalled();
+  });
+
+  it("volume 50 plays at half amplitude (linear)", () => {
+    const { instances } = stubAudio();
+    fireAlert("down", ["Internet"], false, {
+      ...baseConfig,
+      down_sound: true,
+      notify_volume: 50,
+    });
+    expect(instances).toHaveLength(1);
+    expect(instances[0].volume).toBe(0.5);
+  });
+
+  it("volume 100 plays at full amplitude", () => {
+    const { instances } = stubAudio();
+    fireAlert("up", ["Internet"], false, {
+      ...baseConfig,
+      up_sound: true,
+      notify_volume: 100,
+    });
+    expect(instances[0].volume).toBe(1);
+  });
+
+  it("fireCutOffAlert obeys the same gate", () => {
+    const { instances, play } = stubAudio();
+    fireCutOffAlert({ ...baseConfig, down_sound: true, notify_volume: 0 });
+    expect(instances).toHaveLength(0);
+    expect(play).not.toHaveBeenCalled();
+
+    fireCutOffAlert({ ...baseConfig, down_sound: true, notify_volume: 25 });
+    expect(instances).toHaveLength(1);
+    expect(instances[0].volume).toBe(0.25);
+  });
+
+  it("still fires the notification at volume 0 — banner without audio", () => {
+    const { instances } = stubAudio();
+    fireAlert("down", ["Internet"], false, {
+      ...baseConfig,
+      down_notify: true,
+      down_sound: true,
+      notify_volume: 0,
+    });
+    expect(mockNotify).toHaveBeenCalledWith("Outage", "Internet is down.");
+    expect(instances).toHaveLength(0);
   });
 });

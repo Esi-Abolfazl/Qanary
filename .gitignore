@@ -16,6 +16,10 @@ dist-ssr
 # Rust / Tauri build output
 src-tauri/target
 
+# Playwright e2e artifacts (traces/screenshots on failure)
+test-results
+playwright-report
+
 # Editor directories and files
 .vscode/*
 .claude/*

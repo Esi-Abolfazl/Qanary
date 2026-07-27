@@ -14,6 +14,7 @@ import {
   type UpdateInfo,
 } from "../update";
 import { exportConfig, setHideDock } from "../api";
+import { previewSound } from "../utils/alerts";
 import { Switch } from "./Switch";
 import {
   DndContext,
@@ -38,6 +39,9 @@ type UpdateState =
   | "installing"
   | "up-to-date"
   | "error";
+
+/** True when at least one Sound alert is on — the one predicate for "volume is meaningful". */
+const anySound = (d: boolean, u: boolean, b: boolean) => d || u || b;
 
 // A provider slot with a stable id so dnd-kit can track it across re-renders.
 type ProviderSlot = { id: string; value: string };
@@ -107,6 +111,7 @@ export function Settings({
     upSound: boolean,
     blockedNotify: boolean,
     blockedSound: boolean,
+    volume: number,
   ) => void;
   onShowReleaseNotes: () => void;
   onImport: (path: string) => void;
@@ -121,6 +126,9 @@ export function Settings({
   const [upSound, setUpSound] = useState(true);
   const [blockedNotify, setBlockedNotify] = useState(true);
   const [blockedSound, setBlockedSound] = useState(true);
+  // Notification volume, percent in steps of 25. Invariant (mirrors store::normalize_alerts):
+  // volume === 0 ⟺ no Sound box checked. `commitSound` is the only writer of all four.
+  const [volume, setVolume] = useState(100);
   const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
   const [updateState, setUpdateState] = useState<UpdateState>("idle");
   const [version, setVersion] = useState("");
@@ -157,6 +165,13 @@ export function Settings({
     setUpSound(config.up_sound);
     setBlockedNotify(config.blocked_notify);
     setBlockedSound(config.blocked_sound);
+    // All Sound off reads as volume 0; `|| 100` repairs a stored 0 that somehow arrived
+    // alongside a live Sound flag, so the slider never opens in a contradictory state.
+    setVolume(
+      anySound(config.down_sound, config.up_sound, config.blocked_sound)
+        ? config.notify_volume || 100
+        : 0,
+    );
     setHideDockState(config.hide_dock);
     setHideDockError(null);
     setLoginError(null);
@@ -168,6 +183,36 @@ export function Settings({
       })
       .catch(() => {});
   }, [open, config]);
+
+  /**
+   * The single writer of the three Sound flags + the volume — a UI mirror of the backend's
+   * `store::normalize_alerts`, kept here only for immediate feedback (`App.test.tsx` has a
+   * parity test that the two agree). Takes the *next* values, never reads back stale state.
+   */
+  function commitSound(next: {
+    down: boolean;
+    up: boolean;
+    blocked: boolean;
+    volume: number;
+  }) {
+    let { down, up, blocked, volume: vol } = next;
+    // Which control moved decides which way the coupling runs — otherwise
+    // `{down: true, volume: 0}` is ambiguous (box just checked vs slider just zeroed).
+    const flagsChanged =
+      down !== downSound || up !== upSound || blocked !== blockedSound;
+    if (flagsChanged) {
+      // A Sound box was toggled: the volume follows it. Last box off → 0; first box on from
+      // none → back to an audible level (`|| 100`, since the invariant left it at 0).
+      vol = anySound(down, up, blocked) ? volume || 100 : 0;
+    } else if (vol === 0) {
+      // The slider was dragged to 0 — "no alert sound at all", same rule as the backend.
+      down = up = blocked = false;
+    }
+    setDownSound(down);
+    setUpSound(up);
+    setBlockedSound(blocked);
+    setVolume(vol);
+  }
 
   function updateSlotValue(id: string, val: string) {
     setSlots((prev) =>
@@ -231,6 +276,7 @@ export function Settings({
       upSound,
       blockedNotify,
       blockedSound,
+      volume,
     );
     onClose();
   }
@@ -408,12 +454,21 @@ export function Settings({
                 <input
                   type="checkbox"
                   checked={downNotify}
+                  aria-label="Notify on outage"
                   onChange={(e) => setDownNotify(e.target.checked)}
                 />
                 <input
                   type="checkbox"
                   checked={downSound}
-                  onChange={(e) => setDownSound(e.target.checked)}
+                  aria-label="Sound on outage"
+                  onChange={(e) =>
+                    commitSound({
+                      down: e.target.checked,
+                      up: upSound,
+                      blocked: blockedSound,
+                      volume,
+                    })
+                  }
                 />
 
                 <span className="alert-grid-row-label">
@@ -423,12 +478,21 @@ export function Settings({
                 <input
                   type="checkbox"
                   checked={upNotify}
+                  aria-label="Notify on recovery"
                   onChange={(e) => setUpNotify(e.target.checked)}
                 />
                 <input
                   type="checkbox"
                   checked={upSound}
-                  onChange={(e) => setUpSound(e.target.checked)}
+                  aria-label="Sound on recovery"
+                  onChange={(e) =>
+                    commitSound({
+                      down: downSound,
+                      up: e.target.checked,
+                      blocked: blockedSound,
+                      volume,
+                    })
+                  }
                 />
 
                 <span className="alert-grid-row-label">
@@ -438,14 +502,59 @@ export function Settings({
                 <input
                   type="checkbox"
                   checked={blockedNotify}
+                  aria-label="Notify on blocked list"
                   onChange={(e) => setBlockedNotify(e.target.checked)}
                 />
                 <input
                   type="checkbox"
                   checked={blockedSound}
-                  onChange={(e) => setBlockedSound(e.target.checked)}
+                  aria-label="Sound on blocked list"
+                  onChange={(e) =>
+                    commitSound({
+                      down: downSound,
+                      up: upSound,
+                      blocked: e.target.checked,
+                      volume,
+                    })
+                  }
                 />
               </div>
+
+              <div className="volume-row">
+                <label className="volume-label" htmlFor="notify-volume">
+                  Sound volume
+                </label>
+                <input
+                  id="notify-volume"
+                  className="volume-slider"
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={25}
+                  value={volume}
+                  disabled={!anySound(downSound, upSound, blockedSound)}
+                  onChange={(e) =>
+                    commitSound({
+                      down: downSound,
+                      up: upSound,
+                      blocked: blockedSound,
+                      volume: Number(e.target.value),
+                    })
+                  }
+                  // Preview on release only — not on every onChange, or a held
+                  // keyboard/drag sweep would fire a sound per step.
+                  onPointerUp={() => previewSound(volume)}
+                  onKeyUp={() => previewSound(volume)}
+                />
+                <span className="volume-readout">
+                  {volume === 0 ? "Off" : `${volume}%`}
+                </span>
+              </div>
+              {!anySound(downSound, upSound, blockedSound) && (
+                <p className="settings-note">
+                  Enable a Sound alert to set the volume.
+                </p>
+              )}
             </fieldset>
 
             <fieldset className="settings-card">

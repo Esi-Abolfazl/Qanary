@@ -8,6 +8,19 @@ heading) become that release's notes. Dev-log-only subsections (`## Internal`, `
 `## Development`, `## Chore`, `## CI`, `## Build`, `## More info`) appear on the GitHub
 release page but are hidden from the in-app "What's new" modal.
 
+## Unreleased
+
+<!-- No brackets, so the in-app "What's new" parser skips this block. At release time,
+     rename the heading to `## [x.y.z]` and it becomes that version's notes. -->
+
+## What's new
+
+- Sound volume for alerts — one level for every alert sound, set from a slider in the Critical-list alerts section of Settings (off, 25%, 50%, 75%, 100%). Dragging it to 0 turns the Sound checkboxes off; enabling a Sound alert brings the volume back. Notifications are unaffected, so you can keep the banners with no sound at all.
+
+## More info
+
+- [ADR 0026 — notification sound volume](https://github.com/Esi-Abolfazl/Qanary/blob/main/docs/adr/0026-notification-sound-volume.md).
+
 ## [0.6.0]
 
 ## What's new

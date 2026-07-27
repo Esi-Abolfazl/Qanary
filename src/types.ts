@@ -98,6 +98,8 @@ export interface Config {
   blocked_notify: boolean;
   /** Sound on a fully-blocked alert (reuses the down sound asset). */
   blocked_sound: boolean;
+  /** One level for every alert sound, percent 0..100 in steps of 25. 0 = off. */
+  notify_volume: number;
   hide_dock: boolean;
   last_changelog_version: string | null;
 }

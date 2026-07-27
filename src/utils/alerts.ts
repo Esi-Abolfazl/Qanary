@@ -13,6 +13,27 @@ import upSfx from "../assets/sounds/up.mp3";
 export type Dir = "down" | "up" | "blocked";
 
 /**
+ * Play one alert sound at the configured Notification volume. The single gain path — every
+ * `new Audio()` in the app goes through here.
+ *
+ * `volume` is the stored percent (0..100); `undefined` (config not loaded yet) reads as full.
+ * 0 constructs no Audio at all, so "off" costs nothing. `HTMLAudioElement.volume` is linear
+ * amplitude, so 50 → 0.5.
+ */
+export function playSfx(src: string, volume: number | undefined): void {
+  const pct = Math.min(100, Math.max(0, volume ?? 100));
+  if (pct === 0) return;
+  const audio = new Audio(src);
+  audio.volume = pct / 100;
+  void audio.play().catch(() => {});
+}
+
+/** Play the down sound at `volume` — the Settings slider's release preview. */
+export function previewSound(volume: number): void {
+  playSfx(downSfx, volume);
+}
+
+/**
  * Resolve the direction a pending transition should alert as. "blocked" implies
  * all_down, so it supersedes the plain outage alert — but if the user disabled
  * both blocked toggles, fall back to "down" so a fully-blocked critical outage
@@ -82,7 +103,7 @@ export function fireAlert(
     void notify(title, body);
   }
   if (soundOn) {
-    void new Audio(dir === "up" ? upSfx : downSfx).play().catch(() => {});
+    playSfx(dir === "up" ? upSfx : downSfx, config?.notify_volume);
   }
 }
 
@@ -98,6 +119,6 @@ export function fireCutOffAlert(config: Config | null): void {
     void notify("You're offline", "Can't reach anything — check your connection.");
   }
   if (config?.down_sound) {
-    void new Audio(downSfx).play().catch(() => {});
+    playSfx(downSfx, config?.notify_volume);
   }
 }

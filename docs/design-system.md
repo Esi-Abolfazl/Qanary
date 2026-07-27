@@ -113,7 +113,7 @@ Names below are the real files; some merged or renamed from the original plan.
 | **ServiceList** | [`ServiceList.tsx`](../src/components/ServiceList.tsx) | The ListCard. Header (icon · name · add · options menu · collapse chevron) + the `banner-critical` strip when `all_down` + rows. Drives drag reordering of its services (inner `DndContext`). |
 | **ServiceRow** | [`ServiceRow.tsx`](../src/components/ServiceRow.tsx) | dot · favicon (Google s2) · label · host · latency; single/multi-endpoint. Multi-endpoint folds in the endpoint disclosure (`endpoint-list`) and an `up/blocked/down` count strip. Edit/remove menu; grip replaces the dot in reorder mode. |
 | **Icon** | [`Icon.tsx`](../src/components/Icon.tsx) | Inline SVG icon set (menu, plus, grip, refresh, chevrons, sun/moon/monitor, x, ellipsis…). |
-| **Settings / ListModal / ServiceModal** | resp. files | Forms for WAN providers, system options (Dock, autostart), and list/service add+edit. |
+| **Settings / ListModal / ServiceModal** | resp. files | Forms for WAN providers, system options (Dock, autostart), and list/service add+edit. Settings' alert card is a native-control grid — checkboxes plus the sound-volume `input[type=range]` — all tinted by `accent-color: var(--brand)` rather than a custom-drawn control. |
 | **ChangelogModal** | [`ChangelogModal.tsx`](../src/components/ChangelogModal.tsx) | Renders bundled CHANGELOG on update. |
 | **Switch** | [`Switch.tsx`](../src/components/Switch.tsx) | Toggle primitive. |
 

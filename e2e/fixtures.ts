@@ -55,6 +55,8 @@ export const CONFIG: Config = {
   up_sound: false,
   blocked_notify: false,
   blocked_sound: false,
+  // All *_sound flags off → volume 0 is the consistent state (see store::normalize_alerts).
+  notify_volume: 0,
   hide_dock: false,
   last_changelog_version: null,
 };

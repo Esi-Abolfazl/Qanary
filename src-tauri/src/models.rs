@@ -165,6 +165,12 @@ pub struct Config {
     /// Default on. Additive — older configs load with `blocked_sound = true`.
     #[serde(default = "default_true")]
     pub blocked_sound: bool,
+    /// One output level for every alert sound the app plays, as a percent `0..=100`
+    /// snapped to steps of 25. `0` = off. Only attenuates our own sound assets — the
+    /// native OS banners (`*_notify`) carry no app-controlled audio.
+    /// Additive — older configs load with `notify_volume = 100` via serde default.
+    #[serde(default = "default_volume")]
+    pub notify_volume: u8,
     /// Hide the Dock icon — run as a tray/menu-bar-only app. macOS only; default off.
     #[serde(default)]
     pub hide_dock: bool,
@@ -184,6 +190,17 @@ fn default_noncritical_interval() -> u64 {
 fn default_timeout() -> u64 {
     3000
 }
+fn default_volume() -> u8 {
+    100
+}
+
+/// Clamp a volume percent to `0..=100` and snap it to the nearest multiple of 25.
+/// Integer math (no floats): `+12` then truncating division rounds half-up, and `u8`
+/// makes the 12.5 / 37.5 midpoints unrepresentable anyway.
+pub fn snap_volume(v: u8) -> u8 {
+    ((v.min(100) as u16 + 12) / 25 * 25) as u8
+}
+
 fn default_ip_providers() -> Vec<String> {
     // Stored without scheme; fetch_wan prepends https:// at call time.
     vec![
@@ -255,6 +272,7 @@ impl Default for Config {
             up_sound: true,
             blocked_notify: true,
             blocked_sound: true,
+            notify_volume: 100,
             hide_dock: false,
             last_changelog_version: None,
         }

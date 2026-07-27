@@ -1245,6 +1245,43 @@ body {
   background: var(--state-blocked);
 }
 
+/* ---------- Notification volume slider (under the alert grid) ---------- */
+
+.volume-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  align-items: center;
+  gap: 8px 16px;
+  font-size: 13px;
+  color: var(--text);
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+}
+
+.volume-slider {
+  accent-color: var(--brand, #ffcc00);
+  width: 100%;
+  cursor: pointer;
+}
+
+.volume-readout {
+  min-width: 34px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  color: var(--muted);
+}
+
+/* Disabled = no Sound alert enabled, so the level means nothing. Must read as inert. */
+.volume-slider:disabled {
+  cursor: not-allowed;
+  opacity: 0.35;
+}
+.volume-row:has(.volume-slider:disabled) .volume-label,
+.volume-row:has(.volume-slider:disabled) .volume-readout {
+  opacity: 0.5;
+}
+
 /* ---------- Update section (Settings footer) ---------- */
 
 .update-section {

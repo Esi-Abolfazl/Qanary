@@ -426,7 +426,7 @@ function App() {
         config={config}
         open={modal?.kind === "settings"}
         onClose={() => setModal(null)}
-        onSave={(criticalInterval, noncriticalInterval, providers, downNotify, downSound, upNotify, upSound, blockedNotify, blockedSound) =>
+        onSave={(criticalInterval, noncriticalInterval, providers, downNotify, downSound, upNotify, upSound, blockedNotify, blockedSound, volume) =>
           api
             .updateSettings(
               criticalInterval,
@@ -439,6 +439,7 @@ function App() {
               upSound,
               blockedNotify,
               blockedSound,
+              volume,
             )
             .then(setConfig)
         }

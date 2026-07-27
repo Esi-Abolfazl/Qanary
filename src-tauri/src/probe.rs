@@ -392,6 +392,7 @@ mod tests {
             up_sound: true,
             blocked_notify: true,
             blocked_sound: true,
+            notify_volume: 100,
             hide_dock: false,
             last_changelog_version: None,
         };

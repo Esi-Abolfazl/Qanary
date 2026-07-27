@@ -75,6 +75,17 @@ Exists because a non-critical List going fully blocked is a real "you're being f
 whereas the same List going fully `down` is usually local-connectivity noise kept silent.
 _Avoid_: blocked notification (bare), outage (reserve outage for the critical-List Transition)
 
+**Notification volume**:
+The single output level applied to every alert sound the app plays (`down.mp3`, `up.mp3`),
+stored as `notify_volume` — a percentage `0..100` snapped to steps of 25, default 100. `0`
+means off. Attenuates only Qanary's own sound assets; it has no bearing on the native OS
+notification banners (the `*_notify` toggles), which carry no app-controlled audio. Coupled to the
+three sound toggles by one rule — `notify_volume = 0` ⟺ every `*_sound` flag is false — enforced in
+the Backend (`store::normalize_alerts`, on load, import and every settings write) and mirrored in
+Settings for immediate feedback, where the control also reads inert while all three are off.
+The coupling is one-way on volume: 0 clears the flags, but a flag never raises a stored level.
+_Avoid_: sound level, gain, mute (mute is `notify_volume = 0`, not a separate flag)
+
 **WAN info**:
 The egress identity shown in the header: current public/WAN IP address plus its geolocated
 country name, 2-letter code, and flag emoji. Resolved by the WAN task (try IP providers in

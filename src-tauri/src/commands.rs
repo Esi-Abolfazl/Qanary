@@ -156,6 +156,7 @@ pub fn update_settings(
     up_sound: Option<bool>,
     blocked_notify: Option<bool>,
     blocked_sound: Option<bool>,
+    notify_volume: Option<u8>,
 ) -> Config {
     mutate(&app, |cfg| {
         if let Some(v) = critical_interval_secs {
@@ -195,6 +196,12 @@ pub fn update_settings(
         if let Some(v) = blocked_sound {
             cfg.blocked_sound = v;
         }
+        if let Some(v) = notify_volume {
+            cfg.notify_volume = v;
+        }
+        // Must stay LAST: it snaps the volume and clears the `*_sound` flags at volume 0, so a
+        // single payload carrying `{notify_volume: 0, down_sound: true}` can never be persisted.
+        crate::store::normalize_alerts(cfg);
     })
 }
 
@@ -565,6 +572,7 @@ pub fn import_config(app: AppHandle, path: String) -> Result<Config, String> {
     }
 
     crate::store::migrate(&mut cfg);
+    crate::store::normalize_alerts(&mut cfg);
 
     let state = app.state::<AppState>();
     *state.config.lock().unwrap() = cfg.clone();
