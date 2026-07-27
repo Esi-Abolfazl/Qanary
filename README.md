@@ -27,7 +27,7 @@ Seeded defaults: **Global** list is critical (red alarm), **Iran** list is non-c
 - **Drag-and-drop reordering** — rearrange lists, the services within them, and the IP provider by dragging.
 - Add your own services and lists. Config persisted as local JSON.
 - Lives in the **system tray** with a dynamic icon that mirrors current status (green / orange / red).
-- Native **desktop notifications** on critical-list status transitions — fire when a critical list goes fully down and again on recovery (with optional sound, at your chosen volume).
+- Native **desktop notifications** on critical-list status transitions — fully down, recovery, fully blocked, and total loss of connectivity (with optional sound, at your chosen volume). One alert per check round, at the worst thing found.
 - **Launch at login** and **Hide the Dock icon** (macOS) for menu-bar-only operation — both in **Settings**.
 - **Dark / light theme** following the system, with a manual override in the menu.
 
@@ -40,6 +40,13 @@ To edit a list: tap `⋯` next to the list name → **Edit**.
 ## Notifications
 
 Qanary sends a native desktop notification when a **critical** list changes state — fully down (`up → down`) and again on recovery (`down → up`). Each can carry a sound. Only critical lists notify, so mark a list **Critical** to start receiving them. Toggle notifications and sound in **Settings**.
+
+Two more alerts share those toggles:
+
+- **Blocked** — a critical list whose every endpoint turns blocked (TCP connects, HTTPS fails: the interception fingerprint) gets a dedicated "Blocked" alert instead of the generic outage one. Own toggles, defaulting on.
+- **You're offline** — when nothing at all is reachable, you get one app-wide offline alert. Uses the outage toggles; it has no setting of its own.
+
+**One alert per check round.** Each service probes on its own schedule, so a single round's changes land a few seconds apart. Qanary waits for the round to go quiet (a little longer than the probe timeout, at most 12s) and then speaks **once**, at the worst thing it found: offline outranks blocked, which outranks a plain outage. Losing your connection therefore gives one "You're offline" alert, not one per list. A list still down when you come back online is announced at that point rather than being dropped, and a later round reaching a worse state alerts again.
 
 **Sound volume** — one level for every alert sound, set with the slider under the alert toggles in **Settings** (off / 25% / 50% / 75% / 100%). It applies to Qanary's own sounds only; the notification banners themselves are unaffected, so leaving every Sound box off gives you silent banners. Sliding to **off** unchecks the Sound boxes, and enabling one brings the volume back.
 

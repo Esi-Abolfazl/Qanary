@@ -3,7 +3,10 @@
 //   "down"    — critical list went all_down (outage)
 //   "up"      — critical list recovered
 //   "blocked" — critical list went fully blocked (whole-list TLS interception)
-// Shared by the App's batched alert pipeline and the test modal.
+// plus the listless Cut-off alert, which outranks all three.
+//
+// `fireBatch` is the single owner of alert precedence — Cut-off > blocked > outage — for one
+// settled Alert batch. App.tsx only collects edges and decides *when* the round is settled.
 
 import type { Config } from "../types";
 import { notify } from "./notify";
@@ -109,10 +112,10 @@ export function fireAlert(
 
 /**
  * Fire the cut-off ("you're offline") alert. Reuses the down notify/sound gate and the down
- * sound asset — there's no separate setting for it (see plan §3). Unlike `fireAlert`, this
+ * sound asset — there's no separate setting for it (see ADR-0024). Unlike `fireAlert`, this
  * isn't keyed by list names: cut-off is a listless, app-wide event with its own fixed copy, so
- * it bypasses `buildMessage` and the batched `pendingRef` pipeline entirely (App.tsx fires this
- * directly on the false→true edge).
+ * it bypasses `buildMessage`. Called only by `fireBatch`, which decides *whether* cut-off is the
+ * rank that speaks for this batch (ADR-0027) — never fired inline off a snapshot edge.
  */
 export function fireCutOffAlert(config: Config | null): void {
   if (config?.down_notify) {
@@ -121,4 +124,65 @@ export function fireCutOffAlert(config: Config | null): void {
   if (config?.down_sound) {
     playSfx(downSfx, config?.notify_volume);
   }
+}
+
+/** One batch entry: a pending List Transition / fully-blocked crossing. */
+export interface BatchEntry {
+  name: string;
+  dir: Dir;
+}
+
+/** Settled-round state the precedence rule needs beyond the entries themselves. */
+export interface BatchContext {
+  /** Cut off holds in the settled snapshot. */
+  cutOff: boolean;
+  /** Cut off crossed false→true somewhere inside this batch. */
+  cutOffEdge: boolean;
+  /** Every critical list is `all_down` in the settled snapshot (total outage copy). */
+  allDown: boolean;
+  /** No critical list is `all_down` in the settled snapshot (full recovery copy). */
+  allUp: boolean;
+}
+
+/**
+ * Fire the one alert a settled Alert batch is owed, at the highest severity that holds:
+ * **Cut-off > blocked > outage**. The single place that ranking lives.
+ *
+ * While Cut off holds, only the Cut-off alert speaks — every List is off *because* of it, so
+ * naming Lists is redundant noise. It speaks only on the `false→true` edge (`cutOffEdge`): once
+ * announced, a sticky Cut off stays silent, and an edge that has already resolved by settle time
+ * (`cutOff` false) never announces an outage the user did not have.
+ *
+ * The channel check mirrors `effectiveDir`'s fall-through, for the same reason: a rank the user
+ * muted cannot outrank anything. With both down flags off the Cut-off alert is inaudible, so it
+ * must not swallow a `blocked` alert the user *did* opt into.
+ *
+ * Returns `suppressed` — true when entries lost to Cut off. The caller keeps those entries
+ * pending instead of dropping them, so an outage that outlives the Cut off is still announced
+ * once Cut off clears (there would be no fresh Transition edge to rediscover it).
+ */
+export function fireBatch(
+  entries: BatchEntry[],
+  ctx: BatchContext,
+  config: Config | null,
+): { suppressed: boolean } {
+  const downNames: string[] = [];
+  const upNames: string[] = [];
+  const blockedNames: string[] = [];
+  for (const { name, dir } of entries) {
+    const eff = effectiveDir(dir, config);
+    if (eff === "down") downNames.push(name);
+    else if (eff === "up") upNames.push(name);
+    else blockedNames.push(name); // "blocked"
+  }
+
+  if (ctx.cutOff && (config?.down_notify || config?.down_sound)) {
+    if (ctx.cutOffEdge) fireCutOffAlert(config);
+    return { suppressed: entries.length > 0 };
+  }
+
+  fireAlert("down", downNames, ctx.allDown, config);
+  fireAlert("up", upNames, ctx.allUp, config);
+  fireAlert("blocked", blockedNames, false, config);
+  return { suppressed: false };
 }

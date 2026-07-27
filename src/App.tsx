@@ -13,7 +13,7 @@ import { serviceToText } from "./utils/parseServices";
 import { checkForUpdate, downloadUpdate, installAndRelaunch } from "./update";
 import { nextUpdatePhase } from "./utils/updateCheck";
 import { criticalTransitions, blockedTransitions } from "./utils/transitions";
-import { effectiveDir, fireAlert, fireCutOffAlert, type Dir } from "./utils/alerts";
+import { fireBatch, type BatchEntry } from "./utils/alerts";
 import { mergeDelta } from "./utils/mergeDelta";
 import {
   DndContext,
@@ -27,9 +27,16 @@ import {
 import { SortableContext, arrayMove, useSortable, verticalListSortingStrategy } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
-// Collect Transitions for this long before firing, so several lists dropping at
-// once produce a single batched notification instead of one each.
-const ALERT_WINDOW_MS = 2500;
+// Alert batch window — idle-debounced, not fixed. Because Status deltas arrive per-Service,
+// one probe round's edges land spread out, so the batch re-arms on every edge and only flushes
+// once the round goes quiet. Quiet = `timeout_ms + 1s`: a straggling probe wave lands at most
+// one timeout behind the previous one, so the configured timeout is the honest input (a
+// hard-coded 4s would be a silent duplicate of it). ALERT_MAX_MS caps a batch that keeps
+// re-arming, so an alert can never be starved indefinitely.
+const ALERT_QUIET_PAD_MS = 1000;
+const ALERT_MAX_MS = 12_000;
+// Fallback quiet base when config hasn't loaded yet — matches the backend default timeout.
+const DEFAULT_TIMEOUT_MS = 3000;
 
 // Re-check for updates every 6 hours in the background (long-running machines / sleep wakeup).
 const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000;
@@ -110,33 +117,51 @@ function App() {
   // Timestamp of the last completed update check (ms). 0 = never checked.
   const lastCheckRef = useRef<number>(0);
 
-  // Batching: pending Transitions keyed by list id (latest edge wins), plus the
-  // open window timer. Flushed once per ALERT_WINDOW_MS into per-direction alerts.
-  const pendingRef = useRef<Map<string, { name: string; dir: Dir }>>(new Map());
+  // Batching: pending Transitions keyed by list id (latest edge wins), plus the open window
+  // timer. Flushed once the probe round settles, into a single alert (see fireBatch).
+  const pendingRef = useRef<Map<string, BatchEntry>>(new Map());
   const timerRef = useRef<number | null>(null);
+  // Cut-off crossed false→true somewhere inside the open batch. Cleared by the flush.
+  const cutOffEdgeRef = useRef(false);
+  // When the open batch started (ms), for the ALERT_MAX_MS cap. null = no batch open.
+  const batchStartRef = useRef<number | null>(null);
+
+  // (Re-)arm the flush timer. Called on every edge-bearing snapshot, so each new edge pushes
+  // the flush out by another quiet period — up to the hard cap measured from batch start.
+  function armFlush() {
+    const now = Date.now();
+    if (batchStartRef.current === null) batchStartRef.current = now;
+    const quiet = (configRef.current?.timeout_ms ?? DEFAULT_TIMEOUT_MS) + ALERT_QUIET_PAD_MS;
+    const elapsed = now - batchStartRef.current;
+    const delay = Math.max(0, Math.min(quiet, ALERT_MAX_MS - elapsed));
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    timerRef.current = window.setTimeout(flushAlerts, delay);
+  }
 
   function flushAlerts() {
     timerRef.current = null;
-    const pending = pendingRef.current;
-    pendingRef.current = new Map();
+    batchStartRef.current = null;
+    const cutOffEdge = cutOffEdgeRef.current;
+    cutOffEdgeRef.current = false;
 
     // "all" = every critical list is now in that direction (full outage / full recovery).
     const crit = (prevSnapshotRef.current?.lists ?? []).filter((l) => l.critical);
     const allDown = crit.length > 0 && crit.every((l) => l.all_down);
     const allUp = crit.length > 0 && crit.every((l) => !l.all_down);
 
-    const downNames: string[] = [];
-    const upNames: string[] = [];
-    const blockedNames: string[] = [];
-    for (const { name, dir } of pending.values()) {
-      const eff = effectiveDir(dir, configRef.current);
-      if (eff === "down") downNames.push(name);
-      else if (eff === "up") upNames.push(name);
-      else blockedNames.push(name); // "blocked"
-    }
-    fireAlert("down", downNames, allDown, configRef.current);
-    fireAlert("up", upNames, allUp, configRef.current);
-    fireAlert("blocked", blockedNames, false, configRef.current);
+    // fireBatch owns the precedence rule (cut-off > blocked > outage). Entries it suppressed
+    // stay pending, so an outage that outlives the cut-off is announced once cut-off clears.
+    const { suppressed } = fireBatch(
+      [...pendingRef.current.values()],
+      {
+        cutOff: prevSnapshotRef.current?.cut_off ?? false,
+        cutOffEdge,
+        allDown,
+        allUp,
+      },
+      configRef.current,
+    );
+    if (!suppressed) pendingRef.current = new Map();
   }
 
   function handleSnapshot(s: Snapshot) {
@@ -152,16 +177,17 @@ function App() {
       for (const t of all) {
         pendingRef.current.set(t.id, { name: t.name, dir: t.dir });
       }
-      // Open one window from the first Transition; later ones join the same batch.
-      if (all.length > 0 && timerRef.current === null) {
-        timerRef.current = window.setTimeout(flushAlerts, ALERT_WINDOW_MS);
-      }
-      // Cut-off (total no-access) has no list id and its own fixed copy, so it fires
-      // directly here instead of joining the list-id-keyed pendingRef batch. Fire once
-      // on the false→true edge only; recovery and first load (prev === null, handled by
-      // the outer guard) stay silent.
-      if (!prev.cut_off && s.cut_off) {
-        fireCutOffAlert(configRef.current);
+      // Cut-off (total no-access) has no list id, so it can't live in the list-id-keyed
+      // pendingRef — record the false→true edge on its own ref and let the flush rank it
+      // against the pending list edges. First load (prev === null) is handled by the outer
+      // guard; a true→false clearing is silent but still re-arms below, since it can release
+      // an outage the cut-off suppressed.
+      if (!prev.cut_off && s.cut_off) cutOffEdgeRef.current = true;
+      // Any edge — list Transition or a cut-off change in either direction — opens or extends
+      // the batch. A cut-off change alone must be able to open one: it can trip with no list
+      // transition at all.
+      if (all.length > 0 || prev.cut_off !== s.cut_off) {
+        armFlush();
       }
     }
     prevSnapshotRef.current = s;

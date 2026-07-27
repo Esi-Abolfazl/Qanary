@@ -3,13 +3,16 @@
 // criticalTransitions: critical list's `all_down` flag flips (outage / recovery).
 // blockedTransitions:  critical list enters fully-blocked state (whole-list
 //                      TLS interception) — a more specific signal than the plain
-//                      all_down outage. When both edges land in the same alert
-//                      batch, "blocked" wins over "down" (see pendingRef in App.tsx).
+//                      all_down outage.
+//
+// These functions only *detect* edges. Which edge gets to speak is ranked in one
+// place — `fireBatch` in ./alerts: cut-off > blocked > outage (ADR-0027).
 //
 // In both cases, lists absent from either snapshot are skipped to avoid false
 // positives on first load or after a list is added/removed.
 
 import type { ListStatus } from "../types";
+import type { Dir } from "./alerts";
 
 export interface Transition {
   /** List id */
@@ -17,7 +20,7 @@ export interface Transition {
   /** List display name */
   name: string;
   /** "down" = outage, "up" = recovery, "blocked" = critical list fully blocked */
-  dir: "down" | "up" | "blocked";
+  dir: Dir;
 }
 
 /**

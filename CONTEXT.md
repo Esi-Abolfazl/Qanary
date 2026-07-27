@@ -43,9 +43,9 @@ _Avoid_: status, health
 
 **Transition**:
 A change in a **critical** List's `all_down` between two consecutive snapshots:
-`false→true` is an **outage**, `true→false` is a **recovery**. Fires the outage/recovery
-notification + sound. Non-critical Lists and per-Service flips do not transition. (No longer the
-*only* notification event — see Blocked-list alert.)
+`false→true` is an **outage**, `true→false` is a **recovery**. Feeds the outage/recovery
+notification + sound, subject to Alert batch precedence. Non-critical Lists and per-Service flips
+do not transition. (No longer the *only* notification event — see Blocked-list alert, Cut-off alert.)
 _Avoid_: change, flip, event (when you mean this specific critical-List crossing)
 
 **Fully blocked**:
@@ -65,6 +65,26 @@ per-Endpoint `blocked`/`down` distinction (meaningless when nothing is reachable
 from **Fully blocked** (one List, TLS-intercepted) — Cut off is the whole app and admits
 `down` too.
 _Avoid_: offline (bare — the copy word, not the rule), all-down (that is the per-List rollup)
+
+**Cut-off alert**:
+The notification + sound fired when the app enters **Cut off** (`false→true`), with fixed
+app-wide copy ("You're offline") rather than any List name. Gated by the same opt-in as the
+outage alert (`down_notify` / `down_sound`) — no setting of its own. Outranks the outage and
+Blocked-list alerts: when Cut off holds, naming individual Lists is redundant noise, so only
+this alert speaks (see Alert batch).
+_Avoid_: offline notification (bare), total-outage alert ("Total outage" is the *outage* alert's
+all-critical-Lists copy, a different event)
+
+**Alert batch**:
+The single alert the app emits per **settled** probe round. Because Status deltas arrive
+per-Service, one round produces a spray of Transitions, Fully-blocked crossings and possibly a
+Cut-off crossing at different instants; batching waits for the round to go quiet, then speaks
+once at the highest severity that holds — **Cut-off alert > Blocked-list alert > outage**. A rank
+that loses stays pending rather than being dropped, so an outage outlived by the Cut off is still
+announced once Cut off clears. A rank the user has muted cannot outrank anything — it falls
+through to the next audible one. A later round may still escalate (a round that only had an
+outage, followed by one that reaches Cut off, alerts twice — the second is new information).
+_Avoid_: alert window, debounce, throttle (those describe the timing mechanism, not the rule)
 
 **Blocked-list alert**:
 An opt-in notification (toggle `blocked_notify`, default on) fired when a **non-critical** List

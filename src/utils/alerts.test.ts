@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 // Mock notify to prevent Tauri plugin-notification from loading
 vi.mock("./notify", () => ({ notify: vi.fn().mockResolvedValue(undefined) }));
 
-import { buildMessage, effectiveDir, fireAlert, fireCutOffAlert } from "./alerts";
+import { buildMessage, effectiveDir, fireAlert, fireBatch, fireCutOffAlert } from "./alerts";
 import type { Config } from "../types";
 import { notify } from "./notify";
 
@@ -235,6 +235,102 @@ describe("fireAlert (blocked direction)", () => {
 
     fireAlert("blocked", ["Iran"], false, { ...baseConfig, blocked_sound: true });
     expect(play).toHaveBeenCalledTimes(1);
+  });
+});
+
+// fireBatch owns the whole alert-precedence rule (cut-off > blocked > outage) for one settled
+// Alert batch, so this block is the matrix that pins it (ADR-0027).
+describe("fireBatch (alert precedence)", () => {
+  const OFFLINE = ["You're offline", "Can't reach anything — check your connection."] as const;
+  /** Audible cut-off channel: both down flags on, so notification *and* sound are countable. */
+  const audible: Config = { ...baseConfig, down_notify: true, down_sound: true };
+  const ctx = { cutOff: false, cutOffEdge: false, allDown: false, allUp: false };
+
+  beforeEach(() => {
+    mockNotify.mockClear();
+  });
+
+  it("cut-off edge + a down entry → only the offline alert, and exactly one sound", () => {
+    const { instances, play } = stubAudio();
+
+    const { suppressed } = fireBatch(
+      [{ name: "Intranet", dir: "down" }],
+      { ...ctx, cutOff: true, cutOffEdge: true, allDown: true },
+      audible,
+    );
+
+    // The reported bug: this used to be two notifications and two sounds.
+    expect(mockNotify).toHaveBeenCalledTimes(1);
+    expect(mockNotify).toHaveBeenCalledWith(...OFFLINE);
+    expect(instances).toHaveLength(1);
+    expect(play).toHaveBeenCalledTimes(1);
+    expect(suppressed).toBe(true);
+  });
+
+  it("sticky cut-off (holds, no new edge) stays silent even with a fresh outage entry", () => {
+    const { play } = stubAudio();
+
+    const { suppressed } = fireBatch(
+      [{ name: "Intranet", dir: "down" }],
+      { ...ctx, cutOff: true, cutOffEdge: false, allDown: true },
+      audible,
+    );
+
+    expect(mockNotify).not.toHaveBeenCalled();
+    expect(play).not.toHaveBeenCalled();
+    // Suppressed, so the caller keeps it pending for when cut-off clears.
+    expect(suppressed).toBe(true);
+  });
+
+  it("a cut-off edge that resolved by settle time alerts the list edges, not offline", () => {
+    fireBatch(
+      [{ name: "Intranet", dir: "down" }],
+      { ...ctx, cutOff: false, cutOffEdge: true },
+      audible,
+    );
+
+    expect(mockNotify).toHaveBeenCalledTimes(1);
+    expect(mockNotify).toHaveBeenCalledWith("Outage", "Intranet is down.");
+  });
+
+  it("a muted cut-off channel never swallows an opted-in blocked alert", () => {
+    fireBatch([{ name: "Iran", dir: "blocked" }], { ...ctx, cutOff: true, cutOffEdge: true }, {
+      ...baseConfig,
+      down_notify: false,
+      down_sound: false,
+      blocked_notify: true,
+    });
+
+    expect(mockNotify).toHaveBeenCalledTimes(1);
+    expect(mockNotify).toHaveBeenCalledWith("Blocked", "Iran appears blocked.");
+  });
+
+  it("no cut-off → down / up / blocked fire as before, nothing suppressed", () => {
+    const { suppressed } = fireBatch(
+      [
+        { name: "Intranet", dir: "down" },
+        { name: "Internet", dir: "up" },
+        { name: "Iran", dir: "blocked" },
+      ],
+      ctx,
+      baseConfig,
+    );
+
+    expect(mockNotify).toHaveBeenCalledWith("Outage", "Intranet is down.");
+    expect(mockNotify).toHaveBeenCalledWith("Recovered", "Internet is back.");
+    expect(mockNotify).toHaveBeenCalledWith("Blocked", "Iran appears blocked.");
+    expect(suppressed).toBe(false);
+  });
+
+  it("isAll flags reach the copy (total outage / full recovery)", () => {
+    fireBatch([{ name: "Intranet", dir: "down" }], { ...ctx, allDown: true }, baseConfig);
+    expect(mockNotify).toHaveBeenCalledWith("Total outage", "All critical lists are down.");
+  });
+
+  it("an empty batch under cut-off reports nothing to retain", () => {
+    const { suppressed } = fireBatch([], { ...ctx, cutOff: true, cutOffEdge: true }, audible);
+    expect(mockNotify).toHaveBeenCalledWith(...OFFLINE);
+    expect(suppressed).toBe(false);
   });
 });
 
