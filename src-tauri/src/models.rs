@@ -166,8 +166,9 @@ pub struct Config {
     #[serde(default = "default_true")]
     pub blocked_sound: bool,
     /// One output level for every alert sound the app plays, as a percent `0..=100`
-    /// snapped to steps of 25. `0` = off. Only attenuates our own sound assets — the
-    /// native OS banners (`*_notify`) carry no app-controlled audio.
+    /// in steps of 1, `0` = muted. Independent of the three `*_sound` flags: they say
+    /// *which* directions make a sound, this says how loud (ADR-0028). Only attenuates
+    /// our own sound assets — the native OS banners (`*_notify`) carry no app-controlled audio.
     /// Additive — older configs load with `notify_volume = 100` via serde default.
     #[serde(default = "default_volume")]
     pub notify_volume: u8,
@@ -194,11 +195,10 @@ fn default_volume() -> u8 {
     100
 }
 
-/// Clamp a volume percent to `0..=100` and snap it to the nearest multiple of 25.
-/// Integer math (no floats): `+12` then truncating division rounds half-up, and `u8`
-/// makes the 12.5 / 37.5 midpoints unrepresentable anyway.
-pub fn snap_volume(v: u8) -> u8 {
-    ((v.min(100) as u16 + 12) / 25 * 25) as u8
+/// Clamp a volume percent to `0..=100`. The slider step is 1, so every in-range value is
+/// legal and the only job left is rejecting a hand-edited `101..=255`.
+pub fn clamp_volume(v: u8) -> u8 {
+    v.min(100)
 }
 
 fn default_ip_providers() -> Vec<String> {

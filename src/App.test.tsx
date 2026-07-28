@@ -75,8 +75,8 @@ const CONFIG: Config = {
   up_sound: false,
   blocked_notify: false,
   blocked_sound: false,
-  // Every *_sound flag is false here, so 0 is the consistent volume (see normalize_alerts).
-  notify_volume: 0,
+  // Independent of the *_sound flags (ADR-0028) — a stored level survives every flag being off.
+  notify_volume: 70,
   hide_dock: false,
   last_changelog_version: null,
 };
@@ -188,9 +188,9 @@ describe("App", () => {
     expect(api.importConfig).toHaveBeenCalledWith("/tmp/picked-config.json");
   });
 
-  // The Settings slider mirrors `store::normalize_alerts` for immediate feedback, so these
-  // assert the mirror agrees with the backend rule in both directions (ADR-0026).
-  describe("notification volume slider (mirror of normalize_alerts)", () => {
+  // The volume and the three Sound flags are independent (ADR-0028): the slider is a level,
+  // not a fourth mute switch. Only "no direction makes a sound" makes the level inapplicable.
+  describe("notification volume slider (independent of the Sound flags)", () => {
     /** Open menu → Settings and return the slider + the three Sound checkboxes. */
     async function openAlertSettings(user: ReturnType<typeof userEvent.setup>) {
       render(<App />);
@@ -207,14 +207,14 @@ describe("App", () => {
       };
     }
 
-    it("is disabled at 0 when every Sound alert is off", async () => {
+    it("is inert while every Sound alert is off, keeping the stored level", async () => {
       const { slider } = await openAlertSettings(userEvent.setup());
       expect(slider).toBeDisabled();
-      expect(slider.value).toBe("0");
+      expect(slider.value).toBe("70"); // the stored level, not 0
       expect(screen.getByText(/enable a sound alert/i)).toBeInTheDocument();
     });
 
-    it("jumps to 100 and enables when the first Sound box is checked", async () => {
+    it("checking a Sound box enables the slider without changing the level", async () => {
       const user = userEvent.setup();
       const { slider, downSound } = await openAlertSettings(user);
 
@@ -222,45 +222,46 @@ describe("App", () => {
 
       expect(downSound).toBeChecked();
       expect(slider).toBeEnabled();
-      expect(slider.value).toBe("100");
+      expect(slider.value).toBe("70");
 
-      // ...and unchecking the last one drops back to 0 / disabled.
+      // ...and unchecking the last one only makes it inert again — the level is untouched.
       await user.click(downSound);
       expect(downSound).not.toBeChecked();
       expect(slider).toBeDisabled();
-      expect(slider.value).toBe("0");
+      expect(slider.value).toBe("70");
     });
 
-    it("setting the slider to 0 unchecks all three Sound boxes and saves notifyVolume: 0", async () => {
+    it("setting the slider to 0 mutes without unchecking any Sound box", async () => {
       const user = userEvent.setup();
       vi.mocked(api.updateSettings).mockResolvedValue(CONFIG);
       const { slider, downSound, upSound, blockedSound } =
         await openAlertSettings(user);
 
-      // Enable all three so there is something for volume 0 to clear.
       await user.click(downSound);
       await user.click(upSound);
       await user.click(blockedSound);
-      expect(slider.value).toBe("100");
 
       // Drag to 0 — fireEvent, since userEvent can't set a range slider's value directly.
       fireEvent.change(slider, { target: { value: "0" } });
 
-      expect(downSound).not.toBeChecked();
-      expect(upSound).not.toBeChecked();
-      expect(blockedSound).not.toBeChecked();
-      expect(slider).toBeDisabled();
+      // 0 is a mute: the three directions stay configured and the slider stays live, so the
+      // user can turn the level back up without redoing the checkboxes.
+      expect(downSound).toBeChecked();
+      expect(upSound).toBeChecked();
+      expect(blockedSound).toBeChecked();
+      expect(slider).toBeEnabled();
+      expect(screen.getByText("Muted")).toBeInTheDocument();
 
       await user.click(screen.getByRole("button", { name: /^save$/i }));
 
-      // The persisted payload must carry the same consistent pair the backend would enforce:
-      // volume 0 with all three sound args false (args 5, 7, 9 are down/up/blocked sound).
+      // `{volume: 0, sound: true}` is a legal persisted state now (args 5, 7, 9 are the
+      // down/up/blocked sound flags) — `alerts.ts::soundAudible` is what keeps it honest.
       const calls = vi.mocked(api.updateSettings).mock.calls;
       const args = calls[calls.length - 1];
       expect(args[10]).toBe(0); // notifyVolume
-      expect(args[5]).toBe(false); // downSound
-      expect(args[7]).toBe(false); // upSound
-      expect(args[9]).toBe(false); // blockedSound
+      expect(args[5]).toBe(true); // downSound
+      expect(args[7]).toBe(true); // upSound
+      expect(args[9]).toBe(true); // blockedSound
     });
   });
 

@@ -199,8 +199,8 @@ pub fn update_settings(
         if let Some(v) = notify_volume {
             cfg.notify_volume = v;
         }
-        // Must stay LAST: it snaps the volume and clears the `*_sound` flags at volume 0, so a
-        // single payload carrying `{notify_volume: 0, down_sound: true}` can never be persisted.
+        // After the assignments, so an out-of-range `notify_volume` from this payload is clamped
+        // rather than persisted as-is.
         crate::store::normalize_alerts(cfg);
     })
 }

@@ -48,7 +48,7 @@ Two more alerts share those toggles:
 
 **One alert per check round.** Each service probes on its own schedule, so a single round's changes land a few seconds apart. Qanary waits for the round to go quiet (a little longer than the probe timeout, at most 12s) and then speaks **once**, at the worst thing it found: offline outranks blocked, which outranks a plain outage. Losing your connection therefore gives one "You're offline" alert, not one per list. A list still down when you come back online is announced at that point rather than being dropped, and a later round reaching a worse state alerts again.
 
-**Sound volume** — one level for every alert sound, set with the slider under the alert toggles in **Settings** (off / 25% / 50% / 75% / 100%). It applies to Qanary's own sounds only; the notification banners themselves are unaffected, so leaving every Sound box off gives you silent banners. Sliding to **off** unchecks the Sound boxes, and enabling one brings the volume back.
+**Sound volume** — one level for every alert sound, set with the slider under the alert toggles in **Settings** (0–100%). It applies to Qanary's own sounds only; the notification banners themselves are unaffected, so leaving every Sound box off gives you silent banners. The slider is a level, not a fourth switch: **Muted** (0) silences the audio and leaves your Sound checkboxes exactly as they are, so turning the level back up restores them. The slider goes inactive only when no direction is set to make a sound at all.
 
 ## Services
 

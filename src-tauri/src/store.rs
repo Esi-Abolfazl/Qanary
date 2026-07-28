@@ -61,26 +61,18 @@ pub fn migrate(cfg: &mut Config) {
     }
 }
 
-/// Bring the alert settings into a self-consistent shape. **The one implementation of the
-/// volume-zero rule** — the UI mirrors it for immediate feedback, nothing else re-derives it.
+/// Bring the alert settings into a legal shape: clamp `notify_volume` to `0..=100`, catching a
+/// hand-edited or imported `101..=255`. Runs on load, on import, and on every settings write.
 ///
-/// 1. Snap `notify_volume` to a legal step (also clamps a hand-edited `101..=255`).
-/// 2. Volume `0` means "no alert sound at all", so all three `*_sound` flags are cleared.
-///
-/// Step 2 matters because `{notify_volume: 0, blocked_sound: true}` — reachable by hand-editing
-/// or importing a config — would let the frontend keep alerting on the "blocked" direction while
-/// every sound output is muted, silently swallowing a fully-blocked outage (see ADR-0023).
-/// Keeping that pair unrepresentable in live state is what prevents it.
-///
-/// One-way only: a `*_sound` flag never raises a stored volume. All flags off with volume 100 is
-/// legal and harmless (the flags already mute it) and preserves the user's remembered level.
+/// `notify_volume` and the three `*_sound` flags are **independent** (ADR-0028): volume `0` mutes
+/// the audio and leaves the flags alone, so `{notify_volume: 0, blocked_sound: true}` is a legal
+/// state. It stays honest because the frontend never reads a `*_sound` flag as "audible" on its
+/// own — `alerts.ts::soundAudible` is the single predicate for that, and it is what
+/// `effectiveDir` / `fireBatch` consult, so a muted channel cannot outrank a channel the user
+/// can actually perceive (the ADR-0023 guarantee). Earlier this file cleared the flags at
+/// volume 0 to reach the same end; that made the volume destroy configuration (ADR-0026).
 pub fn normalize_alerts(cfg: &mut Config) {
-    cfg.notify_volume = models::snap_volume(cfg.notify_volume);
-    if cfg.notify_volume == 0 {
-        cfg.down_sound = false;
-        cfg.up_sound = false;
-        cfg.blocked_sound = false;
-    }
+    cfg.notify_volume = models::clamp_volume(cfg.notify_volume);
 }
 
 /// Write config to `path`, creating parent dirs as needed. Pretty-printed for hand-editing.
@@ -192,25 +184,23 @@ mod tests {
         assert!(cfg.schema_version > CURRENT_SCHEMA);
     }
 
-    /// `snap_volume` clamps to 0..=100 and rounds to the nearest multiple of 25.
+    /// `clamp_volume` clamps to 0..=100; step is 1, so in-range values pass through unchanged.
     #[test]
-    fn snap_volume_rounds_to_steps_of_25() {
-        use crate::models::snap_volume;
-        assert_eq!(snap_volume(0), 0);
-        assert_eq!(snap_volume(12), 0);
-        assert_eq!(snap_volume(13), 25);
-        assert_eq!(snap_volume(37), 25);
-        assert_eq!(snap_volume(38), 50);
-        assert_eq!(snap_volume(100), 100);
+    fn clamp_volume_clamps_to_0_100() {
+        use crate::models::clamp_volume;
+        assert_eq!(clamp_volume(0), 0);
+        assert_eq!(clamp_volume(1), 1);
+        assert_eq!(clamp_volume(37), 37);
+        assert_eq!(clamp_volume(100), 100);
         // Out of range (hand-edited) values clamp down to 100 rather than wrapping.
-        assert_eq!(snap_volume(101), 100);
-        assert_eq!(snap_volume(255), 100);
+        assert_eq!(clamp_volume(101), 100);
+        assert_eq!(clamp_volume(255), 100);
     }
 
-    /// Volume 0 clears every `*_sound` flag — the pair `{volume: 0, sound: true}` must be
-    /// unrepresentable in live state (see ADR-0023 / the doc comment on `normalize_alerts`).
+    /// Volume 0 is a mute, not a reset: the three `*_sound` flags survive it, so raising the
+    /// volume again restores exactly the directions the user had configured (ADR-0028).
     #[test]
-    fn normalize_alerts_zero_volume_clears_sound_flags() {
+    fn normalize_alerts_zero_volume_keeps_sound_flags() {
         let mut cfg = Config::default();
         cfg.notify_volume = 0;
         cfg.down_sound = true;
@@ -219,26 +209,27 @@ mod tests {
 
         normalize_alerts(&mut cfg);
 
-        assert!(!cfg.down_sound);
-        assert!(!cfg.up_sound);
-        assert!(!cfg.blocked_sound);
+        assert_eq!(cfg.notify_volume, 0);
+        assert!(cfg.down_sound);
+        assert!(cfg.up_sound);
+        assert!(cfg.blocked_sound);
     }
 
-    /// An off-step volume is snapped, and the sound flags are untouched above 0.
+    /// An out-of-range volume is clamped, and the sound flags are never touched.
     #[test]
-    fn normalize_alerts_snaps_without_touching_flags() {
+    fn normalize_alerts_clamps_without_touching_flags() {
         let mut cfg = Config::default();
-        cfg.notify_volume = 37;
+        cfg.notify_volume = 137;
         cfg.down_sound = true;
 
         normalize_alerts(&mut cfg);
 
-        assert_eq!(cfg.notify_volume, 25);
-        assert!(cfg.down_sound, "a non-zero volume must not change the flags");
+        assert_eq!(cfg.notify_volume, 100);
+        assert!(cfg.down_sound, "clamping must not change the flags");
     }
 
-    /// The rule is one-way: all flags off does NOT lower the stored volume, so the user's
-    /// remembered level survives turning every sound alert off and back on.
+    /// All flags off does NOT lower the stored volume, so the user's remembered level survives
+    /// turning every sound alert off and back on.
     #[test]
     fn normalize_alerts_keeps_volume_when_all_flags_off() {
         let mut cfg = Config::default();
@@ -252,17 +243,17 @@ mod tests {
         assert_eq!(cfg.notify_volume, 100);
     }
 
-    /// A saved off-step volume is snapped when the config is loaded from disk.
+    /// A saved out-of-range volume is clamped when the config is loaded from disk.
     #[test]
-    fn load_snaps_stored_volume() {
+    fn load_clamps_stored_volume() {
         let dir = std::env::temp_dir().join(format!("qanary-volume-{}", uuid::Uuid::new_v4()));
         let path = dir.join("config.json");
 
         let mut original = Config::default();
-        original.notify_volume = 37;
+        original.notify_volume = 137;
         save(&path, &original).expect("save");
 
-        assert_eq!(load(&path).notify_volume, 25);
+        assert_eq!(load(&path).notify_volume, 100);
 
         fs::remove_dir_all(&dir).ok();
     }

@@ -8,6 +8,21 @@ heading) become that release's notes. Dev-log-only subsections (`## Internal`, `
 `## Development`, `## Chore`, `## CI`, `## Build`, `## More info`) appear on the GitHub
 release page but are hidden from the in-app "What's new" modal.
 
+## [0.6.3]
+
+## What's new
+
+- The sound volume slider now moves in single percent steps instead of jumping between 25% marks, so you can set any level you like.
+
+## Fix
+
+- Muting the volume no longer switches your Sound alerts off. Sliding to **Muted** (0) silences Qanary's sounds and leaves the Sound checkboxes exactly as you set them, so turning the level back up brings your alerts back — previously it unchecked all three and you had to redo them. The slider now goes inactive only when no alert is set to make a sound at all. Notifications are unaffected either way.
+- If a previous version cleared your Sound checkboxes when you muted the volume, re-check the ones you want; they will stick from now on.
+
+## More info
+
+- [ADR 0028 — volume independent of the Sound flags](https://github.com/Esi-Abolfazl/Qanary/blob/main/docs/adr/0028-volume-independent-of-sound-flags.md).
+
 ## [0.6.2]
 
 ## What's new

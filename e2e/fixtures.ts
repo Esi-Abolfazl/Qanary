@@ -55,8 +55,8 @@ export const CONFIG: Config = {
   up_sound: false,
   blocked_notify: false,
   blocked_sound: false,
-  // All *_sound flags off → volume 0 is the consistent state (see store::normalize_alerts).
-  notify_volume: 0,
+  // Independent of the *_sound flags (ADR-0028) — a stored level survives every flag being off.
+  notify_volume: 70,
   hide_dock: false,
   last_changelog_version: null,
 };

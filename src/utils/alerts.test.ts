@@ -67,6 +67,26 @@ describe("effectiveDir", () => {
     ).toBe("down");
   });
 
+  // ADR-0028: `{sound: true, volume: 0}` is a legal state, so the flag alone is not audibility.
+  // Without this, a muted blocked channel would keep the "blocked" direction and the alert would
+  // vanish — no banner (notify off) and no sound (volume 0) — the ADR-0023 silent swallow.
+  it("falls back to down when blocked_sound is on but the volume is muted", () => {
+    expect(
+      effectiveDir("blocked", {
+        ...baseConfig,
+        blocked_notify: false,
+        blocked_sound: true,
+        notify_volume: 0,
+      }),
+    ).toBe("down");
+  });
+
+  it("keeps blocked at volume 0 when the banner is still on", () => {
+    expect(
+      effectiveDir("blocked", { ...baseConfig, blocked_notify: true, notify_volume: 0 }),
+    ).toBe("blocked");
+  });
+
   it("passes down/up through unchanged", () => {
     expect(effectiveDir("down", baseConfig)).toBe("down");
     expect(effectiveDir("up", baseConfig)).toBe("up");
@@ -298,6 +318,21 @@ describe("fireBatch (alert precedence)", () => {
       ...baseConfig,
       down_notify: false,
       down_sound: false,
+      blocked_notify: true,
+    });
+
+    expect(mockNotify).toHaveBeenCalledTimes(1);
+    expect(mockNotify).toHaveBeenCalledWith("Blocked", "Iran appears blocked.");
+  });
+
+  // Same rule one level up: a cut-off channel whose only opt-in is a muted sound cannot
+  // outrank a blocked alert the user did opt into (ADR-0028).
+  it("a cut-off channel muted by volume 0 never swallows an opted-in blocked alert", () => {
+    fireBatch([{ name: "Iran", dir: "blocked" }], { ...ctx, cutOff: true, cutOffEdge: true }, {
+      ...baseConfig,
+      down_notify: false,
+      down_sound: true,
+      notify_volume: 0,
       blocked_notify: true,
     });
 

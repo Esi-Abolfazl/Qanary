@@ -20,8 +20,8 @@ export type Dir = "down" | "up" | "blocked";
  * `new Audio()` in the app goes through here.
  *
  * `volume` is the stored percent (0..100); `undefined` (config not loaded yet) reads as full.
- * 0 constructs no Audio at all, so "off" costs nothing. `HTMLAudioElement.volume` is linear
- * amplitude, so 50 → 0.5.
+ * 0 (muted) constructs no Audio at all, so silence costs nothing. `HTMLAudioElement.volume`
+ * is linear amplitude, so 50 → 0.5.
  */
 export function playSfx(src: string, volume: number | undefined): void {
   const pct = Math.min(100, Math.max(0, volume ?? 100));
@@ -37,13 +37,32 @@ export function previewSound(volume: number): void {
 }
 
 /**
+ * Whether a Sound channel can actually be heard: its flag is on **and** the volume is above 0.
+ * The single predicate for "audible" — a `*_sound` flag alone is not one, since `notify_volume`
+ * is independent of the flags (ADR-0028) and `{sound: true, volume: 0}` is a legal, silent state.
+ *
+ * Every precedence/fall-back decision reads this, never the raw flag: a channel that can't be
+ * perceived must not count as an alert the user received.
+ */
+export function soundAudible(
+  flag: boolean | undefined,
+  config: Config | null,
+): boolean {
+  return !!flag && (config?.notify_volume ?? 100) > 0;
+}
+
+/**
  * Resolve the direction a pending transition should alert as. "blocked" implies
- * all_down, so it supersedes the plain outage alert — but if the user disabled
- * both blocked toggles, fall back to "down" so a fully-blocked critical outage
- * is never silently swallowed.
+ * all_down, so it supersedes the plain outage alert — but if neither blocked channel
+ * can reach the user (notify off, and sound off *or* muted), fall back to "down" so a
+ * fully-blocked critical outage is never silently swallowed.
  */
 export function effectiveDir(dir: Dir, config: Config | null): Dir {
-  if (dir === "blocked" && !config?.blocked_notify && !config?.blocked_sound) {
+  if (
+    dir === "blocked" &&
+    !config?.blocked_notify &&
+    !soundAudible(config?.blocked_sound, config)
+  ) {
     return "down";
   }
   return dir;
@@ -154,8 +173,9 @@ export interface BatchContext {
  * (`cutOff` false) never announces an outage the user did not have.
  *
  * The channel check mirrors `effectiveDir`'s fall-through, for the same reason: a rank the user
- * muted cannot outrank anything. With both down flags off the Cut-off alert is inaudible, so it
- * must not swallow a `blocked` alert the user *did* opt into.
+ * muted cannot outrank anything. With the down banner off and the down sound off *or* muted by
+ * `notify_volume: 0`, the Cut-off alert is imperceptible, so it must not swallow a `blocked`
+ * alert the user *did* opt into — hence `soundAudible`, not the raw flag.
  *
  * Returns `suppressed` — true when entries lost to Cut off. The caller keeps those entries
  * pending instead of dropping them, so an outage that outlives the Cut off is still announced
@@ -176,7 +196,7 @@ export function fireBatch(
     else blockedNames.push(name); // "blocked"
   }
 
-  if (ctx.cutOff && (config?.down_notify || config?.down_sound)) {
+  if (ctx.cutOff && (config?.down_notify || soundAudible(config?.down_sound, config))) {
     if (ctx.cutOffEdge) fireCutOffAlert(config);
     return { suppressed: entries.length > 0 };
   }

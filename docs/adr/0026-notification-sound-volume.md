@@ -1,8 +1,19 @@
-# 0026. One global `notify_volume` (0–100, step 25), with the zero rule enforced in Rust
+# 0026. One global `notify_volume` (0–100), with the zero rule enforced in Rust
 
 - **Status:** accepted
 - **Date:** 2026-07-27
 - **Deciders:** Esi
+
+> **Amendments 2026-07-29:**
+> 1. The slider step is **1**, not 25. `snap_volume` became a plain `0..=100` clamp (now
+>    `clamp_volume`) — with every in-range value legal there is nothing left to snap, so the
+>    "off-step imported value" alternative below no longer applies.
+> 2. **The zero rule below is superseded by [ADR-0028](0028-volume-independent-of-sound-flags.md).**
+>    Volume 0 no longer clears the `*_sound` flags; `{volume: 0, sound: true}` is a legal state, and
+>    the ADR-0023 guarantee is upheld by `alerts.ts::soundAudible` at the decision sites instead of
+>    by normalizing the data. Everything else here — one global level, the single `playSfx` gain
+>    path, `*_notify` untouched — still holds, except that Settings no longer mirrors a backend rule
+>    (`commitSound` is gone).
 
 ## Context
 
@@ -28,12 +39,12 @@ banners carry no app-controlled audio.
 
 ## Decision
 
-Add `notify_volume: u8` to the persisted `Config` — a percent in `0..=100` snapped to steps of 25,
-default 100, `0` meaning off. It is an additive `#[serde(default)]` field, so `CURRENT_SCHEMA` is
+Add `notify_volume: u8` to the persisted `Config` — a percent in `0..=100` (slider step 1; see the
+amendment above), default 100, `0` meaning off. It is an additive `#[serde(default)]` field, so `CURRENT_SCHEMA` is
 unchanged and there is no `migrate` arm.
 
-One backend helper, `store::normalize_alerts`, is the **only** implementation of the rule. It snaps
-the volume to a legal step (which also clamps a hand-edited `101..=255`) and, when the volume is 0,
+One backend helper, `store::normalize_alerts`, is the **only** implementation of the rule. It clamps
+the volume to `0..=100` (catching a hand-edited `101..=255`) and, when the volume is 0,
 clears all three `*_sound` flags. It runs on load, on import, and as the last statement of every
 `update_settings` write — last, so a single payload carrying `{notify_volume: 0, down_sound: true}`
 cannot slip through between the field assignments and the check. The contradictory pair is
