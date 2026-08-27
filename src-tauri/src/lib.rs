@@ -37,8 +37,12 @@ pub fn emit_checking(app: &tauri::AppHandle) {
     let state = app.state::<AppState>();
     let cfg = state.config.lock().unwrap().clone();
     let wan = state.wan.lock().unwrap().clone();
+    let lists = probe::checking_lists(&cfg);
     let snapshot = Snapshot {
-        lists: probe::checking_lists(&cfg),
+        // Computed, not hard-coded false: `checking_lists` is the only input, so there is one
+        // source of truth for "is this settled" rather than two that can drift.
+        settled: probe::is_settled(&lists),
+        lists,
         overall: models::Severity::Green,
         wan,
         cut_off: false, // checking state is never cut-off — nothing has settled yet

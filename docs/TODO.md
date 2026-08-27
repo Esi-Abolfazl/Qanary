@@ -32,6 +32,9 @@
   - **Consent: disclosed, always-on, no in-app toggle** (document in README + privacy note). ⚠️ Reconsider before shipping: an always-on outbound beacon from a censorship tool is itself a signal and gives the user no control — opt-in (off by default, one Settings toggle) is the more defensible default for this audience.
   - **"Install count" caveat:** Aptabase's anonymous model counts daily sessions / active users, **not** lifetime installs (the user hash resets every 24h). For a true lifetime install count, generate a random install UUID stored in `config.json` and send it as an event property.
 
+- [ ] Wake detection could replace the `visibilitychange` update-check hack (ADR-0015 / ADR-0029 follow-up) — both exist because the webview's timers freeze during sleep, but they detect it two different ways. `handleWake` in `App.tsx` is the more direct signal; folding `runUpdateCheck` onto it would remove the visibility listener and the `lastCheckRef` bookkeeping.
+- [ ] `WAKE_GRACE_MAX_MS` is a fixed 20s guess at OS network re-establishment time (ADR-0029). A slow VPN reconnect exceeds it and gets the old offline-then-recovered pair. Revisit only if real machines show it.
+
 
 ### Optional features
 - [ ] Status widget (macOS first, then Windows/Linux)

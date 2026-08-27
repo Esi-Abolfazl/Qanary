@@ -41,6 +41,21 @@ const DEFAULT_TIMEOUT_MS = 3000;
 // Re-check for updates every 6 hours in the background (long-running machines / sleep wakeup).
 const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000;
 
+// --- System wake -------------------------------------------------------------------------
+// The webview's timers stop while the machine is asleep, so a heartbeat tick that comes back
+// with far more wall clock elapsed than its own interval is the wake signal. No OS API is
+// involved, so this works identically on Windows and Linux.
+const WAKE_TICK_MS = 5_000;
+// Gap that counts as a suspension rather than WebKit throttling a hidden window (which caps out
+// around 1 tick/s). A false positive costs one silent grace window, never a lost alert.
+const WAKE_GAP_MS = 20_000;
+// After a wake the OS spends several seconds re-establishing wifi/DHCP/DNS/VPN. Probes in that
+// window fail honestly but describe the wake, not an outage the user had — so alerts are held
+// until the network proves itself (a settled snapshot with no cut-off) or this cap expires.
+// ponytail: fixed cap rather than a configurable one. Upgrade path: derive it from observed
+// post-wake recovery times only if real machines are shown to need longer.
+const WAKE_GRACE_MAX_MS = 20_000;
+
 type ModalState =
   | null
   | { kind: "addList" }
@@ -96,8 +111,12 @@ function App() {
   const [reorderMode, setReorderMode] = useState(false);
   // Changelog shown once after a self-update (auto) or on demand via Settings button.
   const [changelog, setChangelog] = useState<ChangelogEntry[] | null>(null);
-  // Holds the previous snapshot so we can diff for Transitions on each update.
+  // The last snapshot handed to the UI — the merge base for per-Service deltas.
   const prevSnapshotRef = useRef<Snapshot | null>(null);
+  // The last *settled* snapshot — the Transition baseline. Unsettled snapshots are displayed but
+  // never diffed and never become the baseline: their `all_down: false` means "not measured yet",
+  // not "recovered" (ADR-0029).
+  const baselineRef = useRef<Snapshot | null>(null);
 
   // Keep a ref to the latest config so the status-update callback reads fresh flags
   // without needing to re-subscribe whenever config changes.
@@ -125,17 +144,68 @@ function App() {
   const cutOffEdgeRef = useRef(false);
   // When the open batch started (ms), for the ALERT_MAX_MS cap. null = no batch open.
   const batchStartRef = useRef<number | null>(null);
+  // Wall-clock time of the last edge that armed the batch. Read only to spot a batch that
+  // outlived a process suspension — see armFlush.
+  const lastEdgeAtRef = useRef(0);
+  // Wall-clock time of the last heartbeat tick. A large gap means the process was suspended.
+  const lastTickRef = useRef(0);
+  // While non-null, the deadline (ms) of the open post-wake grace window: snapshots repaint but
+  // are not diffed, and the baseline stays at the pre-sleep state.
+  const wakeGraceUntilRef = useRef<number | null>(null);
 
   // (Re-)arm the flush timer. Called on every edge-bearing snapshot, so each new edge pushes
   // the flush out by another quiet period — up to the hard cap measured from batch start.
   function armFlush() {
     const now = Date.now();
-    if (batchStartRef.current === null) batchStartRef.current = now;
     const quiet = (configRef.current?.timeout_ms ?? DEFAULT_TIMEOUT_MS) + ALERT_QUIET_PAD_MS;
+    // A live batch always flushes within `quiet` of its last edge, so a longer gap proves the
+    // timer never ran — the webview was suspended (system sleep / App Nap). Its batch start is
+    // now that whole suspension old on the wall clock, which drives ALERT_MAX_MS negative and
+    // collapses the delay to 0ms. Treat it as a fresh batch instead.
+    if (batchStartRef.current !== null && now - lastEdgeAtRef.current > quiet) {
+      batchStartRef.current = null;
+    }
+    lastEdgeAtRef.current = now;
+    if (batchStartRef.current === null) batchStartRef.current = now;
     const elapsed = now - batchStartRef.current;
     const delay = Math.max(0, Math.min(quiet, ALERT_MAX_MS - elapsed));
     if (timerRef.current !== null) window.clearTimeout(timerRef.current);
     timerRef.current = window.setTimeout(flushAlerts, delay);
+  }
+
+  /**
+   * Close the post-wake grace window: one diff of the settled state the user is now looking at
+   * against the state they last saw, then flush anything an interrupted batch still owes.
+   *
+   * The second half matters on its own: an edge collected just before the sleep never reached
+   * the user, and `diffAgainstBaseline` has already advanced the baseline past it, so nothing
+   * else would ever announce it.
+   */
+  function endWakeGrace(s: Snapshot | null) {
+    wakeGraceUntilRef.current = null;
+    if (s?.settled) diffAgainstBaseline(s);
+    if (pendingRef.current.size > 0 && timerRef.current === null) armFlush();
+  }
+
+  /**
+   * A wake was detected. Stop the timer the sleep froze — its delay is meaningless now — but
+   * keep the pending entries: what the user is owed is one diff of the settled post-wake state
+   * against the state they last saw, plus whatever the interrupted batch had already collected.
+   */
+  function handleWake() {
+    if (timerRef.current !== null) window.clearTimeout(timerRef.current);
+    timerRef.current = null;
+    batchStartRef.current = null;
+    const deadline = Date.now() + WAKE_GRACE_MAX_MS;
+    wakeGraceUntilRef.current = deadline;
+    // The window must close even if no further snapshot arrives: a Service that settled to Down
+    // backs off to 120s (scheduler::BACKOFF_CEILING), which would otherwise hold a real
+    // "you're offline" for that long.
+    window.setTimeout(() => {
+      // Superseded by a later wake, or already closed by a snapshot.
+      if (wakeGraceUntilRef.current !== deadline) return;
+      endWakeGrace(prevSnapshotRef.current);
+    }, WAKE_GRACE_MAX_MS);
   }
 
   function flushAlerts() {
@@ -145,7 +215,7 @@ function App() {
     cutOffEdgeRef.current = false;
 
     // "all" = every critical list is now in that direction (full outage / full recovery).
-    const crit = (prevSnapshotRef.current?.lists ?? []).filter((l) => l.critical);
+    const crit = (baselineRef.current?.lists ?? []).filter((l) => l.critical);
     const allDown = crit.length > 0 && crit.every((l) => l.all_down);
     const allUp = crit.length > 0 && crit.every((l) => !l.all_down);
 
@@ -154,7 +224,7 @@ function App() {
     const { suppressed } = fireBatch(
       [...pendingRef.current.values()],
       {
-        cutOff: prevSnapshotRef.current?.cut_off ?? false,
+        cutOff: baselineRef.current?.cut_off ?? false,
         cutOffEdge,
         allDown,
         allUp,
@@ -164,31 +234,48 @@ function App() {
     if (!suppressed) pendingRef.current = new Map();
   }
 
+  /**
+   * Collect the Transition edges between the last settled snapshot and `s`, then advance the
+   * baseline and arm the flush if there is anything to say. Only ever called with a settled `s`.
+   */
+  function diffAgainstBaseline(s: Snapshot) {
+    const prev = baselineRef.current;
+    baselineRef.current = s;
+    if (prev === null) return; // no baseline yet — first settled round
+    // Critical-list outage / recovery transitions.
+    const transitions = criticalTransitions(prev.lists, s.lists);
+    // Critical list entering fully-blocked (TLS interception) transitions.
+    // Spread order matters: blocked comes last so it overwrites a same-batch
+    // "down" edge for the same list in pendingRef (blocked is more specific).
+    const blocked = blockedTransitions(prev.lists, s.lists);
+    const all = [...transitions, ...blocked];
+    for (const t of all) {
+      pendingRef.current.set(t.id, { name: t.name, dir: t.dir });
+    }
+    // Cut-off (total no-access) has no list id, so it can't live in the list-id-keyed
+    // pendingRef — record the false→true edge on its own ref and let the flush rank it
+    // against the pending list edges. A true→false clearing is silent but still re-arms
+    // below, since it can release an outage the cut-off suppressed.
+    if (!prev.cut_off && s.cut_off) cutOffEdgeRef.current = true;
+    // Any edge — list Transition or a cut-off change in either direction — opens or extends
+    // the batch. A cut-off change alone must be able to open one: it can trip with no list
+    // transition at all.
+    if (all.length > 0 || prev.cut_off !== s.cut_off) {
+      armFlush();
+    }
+  }
+
   function handleSnapshot(s: Snapshot) {
-    const prev = prevSnapshotRef.current;
-    if (prev !== null) {
-      // Critical-list outage / recovery transitions.
-      const transitions = criticalTransitions(prev.lists, s.lists);
-      // Critical list entering fully-blocked (TLS interception) transitions.
-      // Spread order matters: blocked comes last so it overwrites a same-batch
-      // "down" edge for the same list in pendingRef (blocked is more specific).
-      const blocked = blockedTransitions(prev.lists, s.lists);
-      const all = [...transitions, ...blocked];
-      for (const t of all) {
-        pendingRef.current.set(t.id, { name: t.name, dir: t.dir });
+    if (s.settled) {
+      const graceUntil = wakeGraceUntilRef.current;
+      if (graceUntil === null) {
+        diffAgainstBaseline(s);
+      } else if (!s.cut_off || Date.now() >= graceUntil) {
+        // The network proved itself, or the window ran out. Either way this is the settled
+        // state the one post-wake diff should describe.
+        endWakeGrace(s);
       }
-      // Cut-off (total no-access) has no list id, so it can't live in the list-id-keyed
-      // pendingRef — record the false→true edge on its own ref and let the flush rank it
-      // against the pending list edges. First load (prev === null) is handled by the outer
-      // guard; a true→false clearing is silent but still re-arms below, since it can release
-      // an outage the cut-off suppressed.
-      if (!prev.cut_off && s.cut_off) cutOffEdgeRef.current = true;
-      // Any edge — list Transition or a cut-off change in either direction — opens or extends
-      // the batch. A cut-off change alone must be able to open one: it can trip with no list
-      // transition at all.
-      if (all.length > 0 || prev.cut_off !== s.cut_off) {
-        armFlush();
-      }
+      // Otherwise: still inside the window — repaint only, baseline untouched.
     }
     prevSnapshotRef.current = s;
     setSnapshot(s);
@@ -238,6 +325,15 @@ function App() {
     void runUpdateCheck();
     // Background interval: re-check every 6 h so long-running machines stay current.
     const intervalId = window.setInterval(runUpdateCheck, UPDATE_CHECK_MS);
+    // Wake detector: a tick that observes far more wall clock than its own interval means the
+    // process was suspended (system sleep / App Nap).
+    lastTickRef.current = Date.now();
+    const heartbeatId = window.setInterval(() => {
+      const now = Date.now();
+      const gap = now - lastTickRef.current;
+      lastTickRef.current = now;
+      if (gap > WAKE_GAP_MS) handleWake();
+    }, WAKE_TICK_MS);
     // Visibility re-check: webview timers throttle during laptop sleep; fire on focus
     // if at least one interval period has elapsed since the last check.
     function handleVisibilityChange() {
@@ -252,6 +348,7 @@ function App() {
       unlistenService?.();
       if (timerRef.current !== null) window.clearTimeout(timerRef.current);
       window.clearInterval(intervalId);
+      window.clearInterval(heartbeatId);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };
   }, []);

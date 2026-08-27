@@ -405,6 +405,10 @@ pub struct Snapshot {
     /// True when no Endpoint anywhere is reachable — see `probe::is_cut_off`. Forces `overall`
     /// to Red and tells the frontend to render the "offline" hero + all-red dots.
     pub cut_off: bool,
+    /// True when no Endpoint is still `Checking` — see `probe::is_settled`. The frontend diffs
+    /// Transitions only between settled Snapshots; an unsettled one carries placeholder rollups
+    /// rather than measurements (ADR-0029).
+    pub settled: bool,
 }
 
 /// A per-Service push (a **Status delta**): the instant a Service probe task's probe lands it
@@ -417,4 +421,7 @@ pub struct ServiceDelta {
     pub list_all_down: bool,
     pub overall: Severity,
     pub cut_off: bool,
+    /// Settledness of the whole Snapshot after this delta is merged — see `probe::is_settled`.
+    /// Shipped per-delta for the same reason as `cut_off`: only the backend sees every Service.
+    pub settled: bool,
 }

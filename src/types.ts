@@ -44,6 +44,12 @@ export interface Snapshot {
   wan: WanInfo | null;
   /** True when no Endpoint anywhere is reachable — see `probe::is_cut_off` in the backend. */
   cut_off: boolean;
+  /**
+   * True when no Endpoint is still `checking` — see `probe::is_settled` in the backend. An
+   * unsettled Snapshot carries placeholder rollups (`emit_checking` publishes `all_down: false`
+   * before any probe runs), so it is displayed but never diffed for Transitions (ADR-0029).
+   */
+  settled: boolean;
 }
 
 /**
@@ -57,6 +63,7 @@ export interface ServiceDelta {
   list_all_down: boolean;
   overall: Severity;
   cut_off: boolean;
+  settled: boolean;
 }
 
 // ----- Persisted config (returned by mutation commands) -----

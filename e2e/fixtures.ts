@@ -40,6 +40,7 @@ export const SNAPSHOT: Snapshot = {
     flag_emoji: "🇺🇸",
   },
   cut_off: false,
+  settled: true,
 };
 
 export const CONFIG: Config = {

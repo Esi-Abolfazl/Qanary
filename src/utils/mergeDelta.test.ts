@@ -22,6 +22,7 @@ function snap(): Snapshot {
     overall: "green",
     wan: null,
     cut_off: false,
+    settled: true,
   };
 }
 
@@ -32,6 +33,7 @@ function delta(over: Partial<ServiceDelta> = {}): ServiceDelta {
     list_all_down: false,
     overall: "green",
     cut_off: false,
+    settled: true,
     ...over,
   };
 }
@@ -70,5 +72,12 @@ describe("mergeDelta", () => {
     const frozen = JSON.stringify(s);
     mergeDelta(s, delta({ service: svc("a", "down"), list_all_down: true, overall: "red" }));
     expect(JSON.stringify(s)).toBe(frozen);
+  });
+
+  it("takes settled from the delta", () => {
+    // A delta that lands while other Services are still Checking leaves the merged Snapshot
+    // unsettled — the frontend must not diff it for Transitions (ADR-0029).
+    expect(mergeDelta(snap(), delta({ settled: false })).settled).toBe(false);
+    expect(mergeDelta(snap(), delta()).settled).toBe(true);
   });
 });

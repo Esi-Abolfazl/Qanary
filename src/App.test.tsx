@@ -60,6 +60,7 @@ const SNAPSHOT: Snapshot = {
   overall: "green",
   wan: { ip: "1.2.3.4", country_code: "US", country_name: "United States", flag_emoji: "🇺🇸" },
   cut_off: false,
+  settled: true,
 };
 
 const CONFIG: Config = {
@@ -325,6 +326,30 @@ describe("App", () => {
       ...CRIT,
       lists: [{ ...CRIT.lists[0], all_down: true }],
     };
+    /**
+     * What `emit_checking` publishes before a probe round: every endpoint Checking, with
+     * `all_down` / `cut_off` as placeholders rather than measurements.
+     */
+    const CHECKING: Snapshot = {
+      ...CRIT,
+      lists: [
+        {
+          ...CRIT.lists[0],
+          all_down: false,
+          services: [
+            {
+              ...CRIT.lists[0].services[0],
+              state: "checking",
+              endpoints: [
+                { id: "e1", host: "google.com", state: "checking", latency_ms: null },
+              ],
+            },
+          ],
+        },
+      ],
+      cut_off: false,
+      settled: false,
+    };
     // CONFIG.timeout_ms is 5000, so quiet = 6000. 7000 clears it with margin but stays
     // under the 12s hard cap.
     const QUIET_MS = 7000;
@@ -479,6 +504,141 @@ describe("App", () => {
       await settle(QUIET_MS);
       expect(sendNotification).toHaveBeenCalledTimes(2);
       expect(sendNotification).toHaveBeenLastCalledWith(OFFLINE);
+    });
+
+    // The reported burst: every Refresh / network-change round is preceded by a checking
+    // snapshot whose all_down:false read as a full recovery, so each round cost one fake
+    // "Recovered" plus one real "Total outage". On a macOS wake there are several such rounds.
+    it("a checking snapshot is never diffed — a refresh mid-outage stays silent", async () => {
+      const { sendNotification } = await import("@tauri-apps/plugin-notification");
+      const handleSnapshot = await mount({ down_notify: true, up_notify: true });
+      handleSnapshot(CRIT);
+
+      handleSnapshot(CRIT_DOWN);
+      await settle(QUIET_MS);
+      expect(sendNotification).toHaveBeenCalledTimes(1);
+      expect(sendNotification).toHaveBeenLastCalledWith({
+        title: "Total outage",
+        body: "All critical lists are down.",
+      });
+
+      // The placeholder round: repaint only.
+      handleSnapshot(CHECKING);
+      await settle(QUIET_MS);
+      expect(sendNotification).toHaveBeenCalledTimes(1);
+
+      // Probes land, still down — same settled state as the baseline, so still no news.
+      handleSnapshot(CRIT_DOWN);
+      await settle(QUIET_MS);
+      expect(sendNotification).toHaveBeenCalledTimes(1);
+    });
+
+    // A suspension freezes the webview's timers while the wall clock keeps running. The batch's
+    // age then exceeds ALERT_MAX_MS, the remaining cap goes negative, and the debounce collapses
+    // to a 0ms flush — so the first edge after it alerted immediately. 16s is the midpoint of the
+    // only band that exercises armFlush's guard: at or under ALERT_MAX_MS (12s) the cap never goes
+    // negative and there is nothing to fix, and over WAKE_GAP_MS (20s) the heartbeat calls this a
+    // system sleep and `handleWake` owns the case instead. In between, the guard is the only
+    // protection (App Nap, a paused debugger, severe CPU starvation).
+    it("a batch that outlived a suspension gets a fresh quiet window, not a 0ms flush", async () => {
+      const { sendNotification } = await import("@tauri-apps/plugin-notification");
+      const handleSnapshot = await mount({ down_notify: true });
+      handleSnapshot(CRIT);
+
+      // An edge opens a batch; then the process is suspended for 16s.
+      handleSnapshot(CRIT_DOWN);
+      const base = Date.now();
+      const nowSpy = vi.spyOn(Date, "now").mockReturnValue(base + 16_000);
+
+      // Resumed: the first edge must still be held for the full quiet window.
+      handleSnapshot({ ...CRIT_DOWN, cut_off: true });
+      await settle(1);
+      expect(sendNotification).not.toHaveBeenCalled();
+
+      await settle(QUIET_MS);
+      expect(sendNotification).toHaveBeenCalledTimes(1);
+      nowSpy.mockRestore();
+    });
+
+    describe("system wake", () => {
+      // The app's own constants — kept in sync by hand; the specs below fail loudly if they drift.
+      const WAKE_TICK_MS = 5_000;
+      const WAKE_GRACE_MAX_MS = 20_000;
+
+      /**
+       * Simulate a suspension: jump the wall clock by `ms` (fake timers stay frozen, exactly as
+       * they do while the CPU is halted), then let one heartbeat tick observe the gap.
+       *
+       * The spy is installed on top of the fake clock and left in place: every later `Date.now()`
+       * in the test reads `fake + offset`, so timer-driven code still sees time advance.
+       */
+      async function sleepAndWake(ms: number) {
+        const offset = ms;
+        const fakeNow = Date.now;
+        vi.spyOn(Date, "now").mockImplementation(() => fakeNow.call(Date) + offset);
+        await settle(WAKE_TICK_MS);
+      }
+
+      it("a wake with connectivity already back alerts nothing", async () => {
+        const { sendNotification } = await import("@tauri-apps/plugin-notification");
+        const handleSnapshot = await mount({ down_notify: true, up_notify: true });
+        handleSnapshot(CRIT); // baseline: everything up
+
+        await sleepAndWake(3_600_000);
+
+        // Post-wake, the network stack is not up yet: probes fail fast and settle to cut-off.
+        handleSnapshot({ ...CRIT_DOWN, cut_off: true });
+        await settle(QUIET_MS);
+        expect(sendNotification).not.toHaveBeenCalled();
+
+        // Wifi/DHCP/DNS finish; the network proves itself and closes the window early.
+        handleSnapshot(CRIT);
+        await settle(QUIET_MS);
+        expect(sendNotification).not.toHaveBeenCalled();
+
+        // The grace cap passing changes nothing — the window is already closed.
+        await settle(WAKE_GRACE_MAX_MS);
+        expect(sendNotification).not.toHaveBeenCalled();
+      });
+
+      it("an outage that began during the sleep is announced once, after the window", async () => {
+        const { sendNotification } = await import("@tauri-apps/plugin-notification");
+        const handleSnapshot = await mount({ down_notify: true });
+        handleSnapshot(CRIT); // baseline: everything up
+
+        await sleepAndWake(3_600_000);
+
+        // Still nothing reachable, round after round — held while the window is open.
+        handleSnapshot({ ...CRIT_DOWN, cut_off: true });
+        await settle(QUIET_MS);
+        expect(sendNotification).not.toHaveBeenCalled();
+
+        // The window expires. One diff against the pre-sleep baseline, one alert.
+        await settle(WAKE_GRACE_MAX_MS);
+        await settle(QUIET_MS);
+        expect(sendNotification).toHaveBeenCalledTimes(1);
+        expect(sendNotification).toHaveBeenCalledWith(OFFLINE);
+      });
+
+      it("an edge the sleep interrupted is still announced, once", async () => {
+        const { sendNotification } = await import("@tauri-apps/plugin-notification");
+        const handleSnapshot = await mount({ down_notify: true });
+        handleSnapshot(CRIT);
+
+        // The outage lands, opening a batch — then the machine sleeps before it can flush.
+        handleSnapshot(CRIT_DOWN);
+        await sleepAndWake(3_600_000);
+        expect(sendNotification).not.toHaveBeenCalled();
+
+        // Nothing new arrives; the window expires and pays out what the batch still owed.
+        await settle(WAKE_GRACE_MAX_MS);
+        await settle(QUIET_MS);
+        expect(sendNotification).toHaveBeenCalledTimes(1);
+        expect(sendNotification).toHaveBeenCalledWith({
+          title: "Total outage",
+          body: "All critical lists are down.",
+        });
+      });
     });
   });
 

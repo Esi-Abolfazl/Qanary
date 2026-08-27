@@ -137,6 +137,22 @@ pub fn is_cut_off(lists: &[ListStatus]) -> bool {
     !any_up && !any_checking && any_failing
 }
 
+/// True when no Endpoint anywhere is still `Checking` — every probe of the round has landed.
+///
+/// This is what separates a *measurement* from a *placeholder*. `emit_checking` (ADR-0005)
+/// publishes `all_down: false` and `cut_off: false` for every List before a single probe runs,
+/// purely so the UI can paint the checking dots. Those values are "not measured yet", not
+/// "everything recovered" — so the frontend diffs Transitions only between settled Snapshots
+/// (ADR-0029). Without this flag every Refresh, mutation and network-change round fabricated a
+/// full recovery alert.
+pub fn is_settled(lists: &[ListStatus]) -> bool {
+    !lists
+        .iter()
+        .flat_map(|l| l.services.iter())
+        .flat_map(|s| s.endpoints.iter())
+        .any(|e| e.state == ServiceState::Checking)
+}
+
 /// Critical list fully down → Red; non-critical list fully down → Yellow; else Green.
 /// Cut-off (total no-access, see `is_cut_off`) overrides straight to Red — `Blocked` vs `Down`
 /// is meaningless once nothing at all is reachable.
@@ -401,6 +417,8 @@ mod tests {
         assert!(!lists[0].all_down);
         assert!(lists[0].services.iter().all(|s| s.state == ServiceState::Checking));
         assert!(lists[0].services.iter().all(|s| s.endpoints.iter().all(|e| e.state == ServiceState::Checking)));
+        // The emit_checking payload is the placeholder the frontend must never diff (ADR-0029).
+        assert!(!is_settled(&lists));
     }
 
     #[tokio::test]
@@ -454,6 +472,18 @@ mod tests {
         assert_eq!(overall_severity(&[list_status(&[&[Down, Down]]), list_status(&[&[Up]])]), Severity::Yellow);
         // All up → Green
         assert_eq!(overall_severity(&[list_status(&[&[Up]]), list_status(&[&[Up]])]), Severity::Green);
+    }
+
+    #[test]
+    fn is_settled_only_when_no_endpoint_is_checking() {
+        use ServiceState::*;
+        // Every probe of the round has landed — the rollups are measurements.
+        assert!(is_settled(&[list_status(&[&[Up, Down]])]));
+        // One probe still in flight anywhere → the whole snapshot is a placeholder.
+        assert!(!is_settled(&[list_status(&[&[Up, Checking]])]));
+        assert!(!is_settled(&[list_status(&[&[Down]]), list_status(&[&[Checking]])]));
+        // Nothing to wait for.
+        assert!(is_settled(&[]));
     }
 
     #[test]

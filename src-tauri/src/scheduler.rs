@@ -182,6 +182,10 @@ fn recompute_delta(snap: &mut Snapshot, list_id: &str, status: ServiceStatus) ->
     snap.overall = overall;
     let cut_off = crate::probe::is_cut_off(&snap.lists);
     snap.cut_off = cut_off;
+    // Written back into the stored Snapshot as well as the delta: the WAN task emits that stored
+    // Snapshot wholesale on `status-update`, so a stale `settled` there would mislead the frontend.
+    let settled = crate::probe::is_settled(&snap.lists);
+    snap.settled = settled;
 
     Some(ServiceDelta {
         list_id: list_id.to_string(),
@@ -189,6 +193,7 @@ fn recompute_delta(snap: &mut Snapshot, list_id: &str, status: ServiceStatus) ->
         list_all_down,
         overall,
         cut_off,
+        settled,
     })
 }
 
@@ -389,6 +394,7 @@ mod tests {
             overall: Severity::Green,
             wan: None,
             cut_off: false,
+            settled: true,
         }
     }
 
