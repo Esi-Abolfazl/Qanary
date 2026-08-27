@@ -57,12 +57,34 @@ pnpm test:e2e                  # Playwright e2e vs pnpm dev (port 1420)
 - Frontend subscribes to `status://update` Tauri event (no polling).
 - Backend owns all probe/rollup/persistence logic; tray (later) reuses same snapshot.
 
+## Every reply: scannable, ends with a status footer
+
+The user has ADHD — optimize every reply for scanning, not reading:
+front-load the answer, keep paragraphs short, make actions explicit.
+
+End every reply — even one-liners — with this block, always last,
+always in this order:
+
+---
+**Status:** ✅ done — or ⏳ in progress + what remains, in one line
+**Need from you:** one concrete question or action — or "nothing"
+**Heads-up:** ⚠️ must-know / must-do with consequences — or "none"
+---
+
+- One short line per row, never a paragraph.
+- "Need from you" is a specific ask ("reply yes to apply", "paste the
+  error"), never a vague "let me know".
+- Heads-up is only for real consequences: side effects, processes
+  left running, things that will break, deadlines. No filler.
+- If all three are trivial, compress to one line:
+  `Status: ✅ done · Need: nothing · Heads-up: none`
+
 ## ADRs
 
 - Location: `docs/adr/` (in the project root, checked into git).
 - Template: `docs/adr/_TEMPLATE.md`.
 - Numbering: 4-digit zero-padded, continuing from highest existing file.
-- Current highest: 0021 (TCP-only "reachable" state for wildcard endpoints).
+- Current highest: 0029 (settled snapshots and post-wake alert grace).
 
 ## TODO
 

@@ -1,6 +1,6 @@
 [package]
 name = "qanary"
-version = "0.6.3"
+version = "0.6.4"
 description = "Qanary — connectivity monitor"
 authors = ["you"]
 edition = "2021"
@@ -46,4 +46,3 @@ futures-util = "0.3"
 system-configuration = "0.6"
 # CFRunLoop, CFString, CFArray — used with system_configuration in netwatch.rs.
 core-foundation = "0.9"
-

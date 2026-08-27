@@ -8,6 +8,22 @@ heading) become that release's notes. Dev-log-only subsections (`## Internal`, `
 `## Development`, `## Chore`, `## CI`, `## Build`, `## More info`) appear on the GitHub
 release page but are hidden from the in-app "What's new" modal.
 
+## [0.6.4]
+
+## Fix
+
+- Waking your Mac from sleep no longer sets off a burst of notifications and alert sounds. Qanary now waits for the network to come back before deciding anything is wrong, and tells you once — not once per retry.
+- A refresh while something was down no longer announced a false "Recovered" a moment before repeating the outage. Refreshing is silent again; only real changes speak.
+- An outage that starts while your Mac is asleep is still reported when you come back, so nothing is quietly swallowed.
+
+## More info
+
+- [ADR 0029 — settled snapshots and a post-wake alert grace window](https://github.com/Esi-Abolfazl/Qanary/blob/main/docs/adr/0029-settled-snapshots-and-post-wake-alert-grace.md).
+
+## Internal
+
+- Agent workflow guidance now requires short, scannable status footers, and the repo-local plan-draft, plan-execute, and plan-review skill copies were removed.
+
 ## [0.6.3]
 
 ## What's new
