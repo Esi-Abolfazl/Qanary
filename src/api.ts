@@ -25,13 +25,14 @@ export const checkNow = (listId: string, serviceId: string, endpointId?: string)
 export const addServices = (listId: string, services: ServiceDraft[]) =>
   invoke<Config>("add_services", { listId, services });
 
-/** Replace a service's label and endpoints (wholesale edit). */
+/** Replace a service's label, endpoints and block-check option (wholesale edit). */
 export const updateService = (
   listId: string,
   serviceId: string,
   label: string,
   endpoints: { host: string; port?: number }[],
-) => invoke<Config>("update_service", { listId, serviceId, label, endpoints });
+  checkBlock: boolean,
+) => invoke<Config>("update_service", { listId, serviceId, label, endpoints, checkBlock });
 
 export const removeService = (listId: string, serviceId: string) =>
   invoke<Config>("remove_service", { listId, serviceId });
