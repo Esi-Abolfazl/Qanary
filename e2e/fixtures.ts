@@ -73,6 +73,7 @@ export const CONFIG: Config = {
   hide_dock: false,
   status_icon: "rings",
   tray_filled: false,
+  tray_shape: "same",
   last_changelog_version: null,
 };
 

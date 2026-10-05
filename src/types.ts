@@ -94,6 +94,9 @@ export interface ServiceList {
  *  menu-bar icon both draw it (ADR-0044). */
 export type StatusIcon = "rings" | "pulse";
 
+/** Which picture the menu-bar icon draws: the app's status icon (`same`), or its own (ADR-0048). */
+export type TrayShape = "same" | StatusIcon;
+
 export interface Config {
   schema_version: number;
   lists: ServiceList[];
@@ -119,6 +122,8 @@ export interface Config {
   status_icon: StatusIcon;
   /** Menu bar only: the icon cut out of a filled rounded square instead of drawn bare. */
   tray_filled: boolean;
+  /** Menu bar only: follow the status icon, or draw its own picture whatever the orb shows. */
+  tray_shape: TrayShape;
   last_changelog_version: string | null;
 }
 

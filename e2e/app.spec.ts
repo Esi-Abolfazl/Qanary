@@ -10,13 +10,16 @@
  *   5. Settings Config card → Export / Import buttons
  *   6. List reorder survives a `service-update` delta
  *   7. A long list name shows an ellipsis, scrolls to its end on hover and eases back
- *   8. The hero ☰, the list chevron and the row ⋮ share one centre line
+ *   8. The hero's boxes (☰, orb, IP chip, logo) sit on the cards' left and right edges; the list icons share a centre line
  *   8b. The list count is as far from the next icon as the icons are from each other
  *   8c. The orb's refresh arrow uses the orb icons' frame and stroke, at 0.85 opacity
  *   9. A service being re-checked shows an animated "Pinging…", then its result
  *  10. Long names never push a row past its card: the row buttons stay inside it
  *  11. Lists stack in a narrow window, sit side by side in a wide one, and a full-screen window
  *      centers them at 480px each instead of stretching
+ *  8d. Controls share one family: 32px / 12px (28px / 10px small), cards and dialogs 16px
+ *  8e. The open ☰ drawer is the ☰'s own shape stretched: every cell 32px, no uneven gap at either end
+ *  8f. The Pulse orb's ripples are outlines that keep its corners; its shake never tilts it
  *  12. The Pulse alarm shows its dead line on arrival, dashed and crawling, and its X beats (the orb's
  *      draw-in must not override them)
  *  13. The ☰ drawer grows out to the ☰'s left (the ☰ turning into a ›), names an action on hover,
@@ -228,9 +231,11 @@ test("7 — a long list name shows an ellipsis, scrolls on hover and eases back"
   await expect(text).toHaveCSS("text-overflow", "ellipsis");
 });
 
-test("8 — the hero ☰, the list chevron and the row menu share one centre line", async ({
+test("8 — the hero sits on the cards' lines (text 6px in, orb on the icon column, ☰ on the edge); the list icons share a centre line", async ({
   mockedPage: page,
 }) => {
+  const edge = (sel: string, side: "left" | "right") =>
+    page.locator(sel).first().evaluate((el, s) => el.getBoundingClientRect()[s], side);
   const centreX = (sel: string) =>
     page.locator(sel).first().evaluate((el) => {
       const b = el.getBoundingClientRect();
@@ -238,12 +243,132 @@ test("8 — the hero ☰, the list chevron and the row menu share one centre lin
     });
   for (const width of [460, 400]) {
     await setWidth(page, width);
-    const gear = await centreX('button[aria-label="Menu"] svg');
+    // Left: the logo is on the cards' edge; the headline and the IP chip sit 6px in from it, together.
+    const left = await edge(".list", "left");
+    expect(Math.abs((await edge(".logo-mark", "left")) - left), `logo left at ${width}`).toBeLessThan(0.6);
+    expect(Math.abs((await edge(".wan", "left")) - (left + 6)), `IP chip left at ${width}`).toBeLessThan(0.6);
+    expect(Math.abs((await edge(".hero-headline", "left")) - (left + 6)), `headline left at ${width}`).toBeLessThan(0.6);
+    // Right: the ☰ and the orb end where the cards end.
+    const right = await edge(".list", "right");
+    expect(Math.abs((await edge('button[aria-label="Menu"]', "right")) - right), `☰ right at ${width}`).toBeLessThan(0.6);
+    // The orb's halo (6px ring) ends on the right edge of the icon column inside the cards (the
+    // chevron); its box is measured, not the orb itself, which pops from a smaller size on arrival.
+    const chevronRight = await edge(".list-chevron-btn", "right");
+    expect(Math.abs((await edge(".orb-wrap", "right")) + 6 - chevronRight), `orb halo vs icon column at ${width}`).toBeLessThan(0.6);
+    // Inside the cards the header chevron and each row's ⋮ still share one centre line.
     const chevron = await centreX(".list-chevron-btn svg");
     const rowMenu = await centreX(".row .list-menu-wrap .list-menu-btn svg");
-    expect(Math.abs(gear - chevron), `gear vs chevron at ${width}`).toBeLessThan(0.6);
     expect(Math.abs(rowMenu - chevron), `row menu vs chevron at ${width}`).toBeLessThan(0.6);
   }
+});
+
+test("8d — controls share one size and corner family; cards and dialogs have their own", async ({
+  mockedPage: page,
+}) => {
+  const look = (sel: string) =>
+    page.locator(sel).first().evaluate((el) => {
+      const c = getComputedStyle(el);
+      return { h: el.getBoundingClientRect().height, r: c.borderTopLeftRadius };
+    });
+  // The ☰, the IP chip and a list's name chip: one 32px control with 12px corners.
+  for (const sel of ['button[aria-label="Menu"]', ".wan", ".list-name"]) {
+    expect(await look(sel), sel).toEqual({ h: 32, r: "12px" });
+  }
+  // A small button (the ⋯ and + in a list header): 28px with 10px corners.
+  expect(await look(".list-head .list-menu-btn")).toEqual({ h: 28, r: "10px" });
+  // A list card: 16px.
+  expect((await look(".list")).r).toBe("16px");
+  // The Add list dialog: a 16px sheet whose fields and buttons are the same 12px controls.
+  await page.getByRole("button", { name: "Menu" }).click();
+  await page.getByRole("button", { name: "Add list" }).click();
+  expect((await look(".modal")).r).toBe("16px");
+  expect((await look(".modal-name-input")).r).toBe("12px");
+  expect(await look(".modal-save")).toEqual({ h: 36, r: "12px" });
+  expect(await look(".modal-cancel")).toEqual({ h: 36, r: "12px" });
+});
+
+test("8e — the open drawer is the ☰ stretched: same height, equal 32px cells, equal ends", async ({
+  mockedPage: page,
+}) => {
+  const menu = page.getByRole("button", { name: "Menu" });
+  const bg = (loc: ReturnType<typeof page.locator>) => loc.evaluate((e) => getComputedStyle(e).backgroundImage);
+  // Hovering the closed ☰ lights the same surface; it never swaps to another background.
+  const restBg = await bg(menu);
+  await menu.hover();
+  await expect.poll(() => menu.evaluate((e) => getComputedStyle(e).filter)).toContain("brightness");
+  expect(await bg(menu)).toBe(restBg);
+
+  await menu.click();
+  const drawer = page.locator(".hero-drawer");
+  await expect(drawer).toHaveAttribute("data-anim", "open");
+  await page.waitForTimeout(700);
+  const rect = (loc: ReturnType<typeof page.locator>) =>
+    loc.evaluate((e) => {
+      const b = e.getBoundingClientRect();
+      return { l: b.left, r: b.right, t: b.top, h: b.height, w: b.width };
+    });
+  const d = await rect(drawer);
+  const toggle = await rect(menu);
+  const cells = await page.locator(".hero-drawer-btn").evaluateAll((els) =>
+    els.map((e) => {
+      const b = e.getBoundingClientRect();
+      return { l: b.left, r: b.right, t: b.top, h: b.height, w: b.width };
+    }),
+  );
+  expect(d.h).toBe(toggle.h); // as tall as the ☰ itself
+  expect(Math.abs(d.r - toggle.r)).toBeLessThan(0.01); // the ☰ is its end cell
+  const sorted = [...cells].sort((a, b) => a.l - b.l);
+  expect(Math.abs(sorted[0].l - d.l), "first cell flush with the capsule's left end").toBeLessThan(0.01);
+  for (const c of cells) {
+    expect(c.w).toBe(toggle.w);
+    expect(c.h).toBe(toggle.h);
+    expect(Math.abs(c.t - toggle.t)).toBeLessThan(0.01);
+  }
+  // Cells touch each other and the ☰: nothing is wider on one side.
+  [...sorted, toggle].slice(1).forEach((c, i) => {
+    const prev = [...sorted, toggle][i];
+    expect(Math.abs(c.l - prev.r), `cell ${i + 1} abuts the previous one`).toBeLessThan(0.01);
+  });
+  expect(Math.abs(d.w - (cells.length + 1) * toggle.w)).toBeLessThan(0.01);
+  // The capsule's own box is the drawer's box (its border is inside its width).
+  expect(await drawer.evaluate((e) => getComputedStyle(e, "::before").boxSizing)).toBe("border-box");
+});
+
+test("8f — the Pulse orb's ripples are outlines that keep the orb's corners; its shake does not tilt it", async ({
+  mockedPage: page,
+}) => {
+  const orb = page.locator(".status-orb");
+  await orb.evaluate((o) => {
+    o.setAttribute("data-icon", "pulse"); // the fixture's config may draw Rings
+    o.classList.add("status-orb-busy");
+  });
+  // A ripple is an outline of fixed width around a box with the orb's own corners, moved out by its
+  // offset: the browser rounds it concentrically, so the gap is the same all the way round.
+  const ripple = () =>
+    orb.evaluate((o) => {
+      const c = getComputedStyle(o, "::after");
+      return { w: c.outlineWidth, style: c.outlineStyle, offset: parseFloat(c.outlineOffset), radius: c.borderTopLeftRadius, border: c.borderTopWidth };
+    });
+  await expect.poll(async () => (await ripple()).offset, { timeout: 4000 }).toBeGreaterThan(2);
+  const r = await ripple();
+  expect(r.w).toBe("2px");
+  expect(r.style).toBe("solid");
+  expect(r.border).toBe("0px"); // not a border whose radius changes every frame
+  expect(r.radius).toBe(await orb.evaluate((o) => getComputedStyle(o).borderTopLeftRadius));
+  // A circle's ripple stays a circle.
+  await orb.evaluate((o) => o.setAttribute("data-icon", "rings"));
+  expect(await orb.evaluate((o) => getComputedStyle(o, "::after").borderTopLeftRadius)).toBe("50%");
+
+  // The alarm shake: a square must not rotate; a circle can.
+  await orb.evaluate((o) => {
+    o.classList.remove("status-orb-busy");
+    o.classList.add("orb-pop", "orb-flash", "orb-shake");
+  });
+  const shake = () => orb.evaluate((o) => getComputedStyle(o).animationName);
+  await orb.evaluate((o) => o.setAttribute("data-icon", "pulse"));
+  expect(await shake()).toContain("orb-shake-flat");
+  await orb.evaluate((o) => o.setAttribute("data-icon", "rings"));
+  expect(await shake()).not.toContain("orb-shake-flat");
 });
 
 test("8b — the list count sits as far from the next icon as the icons sit from each other", async ({
@@ -264,15 +389,19 @@ test("8b — the list count sits as far from the next icon as the icons sit from
   expect(Math.abs((await gaps()).count - normal.count)).toBeLessThan(0.6);
 });
 
-test("8c — the orb's refresh arrow is drawn in the orb icons' frame and stroke", async ({
+test("8c — the orb's refresh arrow is drawn in the orb icons' frame, a little bolder", async ({
   mockedPage: page,
 }) => {
   const look = (sel: string) =>
     page.locator(sel).first().evaluate((el) => {
       const cs = getComputedStyle(el);
-      return [cs.width, cs.height, cs.strokeWidth, el.getAttribute("viewBox")];
+      return { size: [cs.width, cs.height], stroke: parseFloat(cs.strokeWidth), viewBox: el.getAttribute("viewBox") };
     });
-  expect(await look(".orb-refresh svg")).toEqual(await look(".status-orb .orb-icon"));
+  const arrow = await look(".orb-refresh svg");
+  const icon = await look(".status-orb .orb-icon");
+  expect({ size: arrow.size, viewBox: arrow.viewBox }).toEqual({ size: icon.size, viewBox: icon.viewBox });
+  // Bolder than the status icons (2.2 against their 1.5): it is a button's hint, so it should read.
+  expect(arrow.stroke).toBeGreaterThan(icon.stroke);
   // …at 0.85, so it reads as part of the orb rather than a sticker on it.
   await expect(page.locator(".orb-refresh svg")).toHaveCSS("opacity", "0.85");
 });
@@ -362,7 +491,8 @@ test("11 — lists sit side by side once the window fits two, each capped in wid
   expect(a.width, "card width at 1900").toBeLessThanOrEqual(LIST_MAX_PX);
   expect(Math.abs(a.left - (1900 - b.right)), "centered").toBeLessThanOrEqual(1);
   const orb = await page.locator(".orb-wrap").evaluate((el) => el.getBoundingClientRect().right);
-  expect(Math.abs(orb - b.right), "hero ends where the lists end").toBeLessThanOrEqual(16);
+  // The orb sits 17px in from the lists' edge (its halo 6 + the cards' icon column 11).
+  expect(Math.abs(orb - b.right), "hero ends where the lists end").toBeLessThanOrEqual(20);
 });
 
 test("12 — the Pulse alarm line stays dashed and crawling, its X beating", async ({

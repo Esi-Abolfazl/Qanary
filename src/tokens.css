@@ -74,6 +74,39 @@
   --down-ink: light-dark(#c4221b, #ff8f89);
   --glass-blur: blur(40px) saturate(1.6);
 
+  /* ---- One language for fill, line, light and focus (theme-adaptive) ----
+   * Dark chrome is white-alpha, light chrome is ink-alpha; each role has one step, so a hover is
+   * the same hover everywhere. */
+  --fill-1: light-dark(rgba(30, 28, 60, 0.05), rgba(255, 255, 255, 0.04)); /* a well, an open row */
+  --fill-2: light-dark(rgba(30, 28, 60, 0.07), rgba(255, 255, 255, 0.07)); /* hover */
+  --fill-3: light-dark(rgba(30, 28, 60, 0.1), rgba(255, 255, 255, 0.1)); /* a hairline, a pressed hover */
+  --fill-4: light-dark(rgba(30, 28, 60, 0.14), rgba(255, 255, 255, 0.14)); /* strong */
+  --raised: light-dark(#fff, rgba(255, 255, 255, 0.12)); /* a selected item lifted off its well */
+  --hl: light-dark(#fff, rgba(255, 255, 255, 0.07)); /* the lit top edge of a surface */
+  --hl-strong: light-dark(#fff, rgba(255, 255, 255, 0.12)); /* the same, on a sheet or a lifted chip */
+  --focus-ring: 0 0 0 3px color-mix(in srgb, var(--brand) 55%, transparent);
+  --focus-ring-sm: 0 0 0 2px color-mix(in srgb, var(--brand) 60%, transparent); /* text-sized targets */
+  --focus-ring-soft: 0 0 0 3px color-mix(in srgb, var(--brand) 30%, transparent); /* a field */
+
+  /* A menu or popover: opaque so it reads over any glow, one gradient, one edge, one shadow. */
+  --menu-bg: linear-gradient(180deg, light-dark(#faf9ff, #2c2c32), light-dark(#eceaf6, #1f1f24));
+  --menu-border: var(--fill-3);
+  --menu-shadow:
+    var(--elevation),
+    inset 0 1px 0 var(--hl);
+  --r-menu: 16px;
+  --orb-halo: 6px; /* the ring around the orb: its outer edge, not the orb, is what sits on a line */
+  --card-inset: 11px; /* a card's border (1) + header padding (10): where its content starts */
+  --hero-text-inset: 6px; /* how far the headline and the IP chip sit in from the cards' left edge */
+  --r-orb-pulse: 31%; /* the Pulse orb: a rounded square (Rings is a circle) */
+
+  /* How much of a state or brand colour a tint carries, on any surface. */
+  --tint-1: 10%; /* a hairline, a faint wash */
+  --tint-2: 18%; /* a hover or a filled well */
+  --tint-3: 24%; /* a selected or pressed control */
+  --ring: 40%; /* an outline in the colour */
+  --glow: 55%; /* a halo */
+
   /* ---- Elevation (theme-adaptive shadow) ---- */
   --elevation: light-dark(
     0 6px 24px rgba(30, 28, 60, 0.16),
@@ -110,6 +143,17 @@
   --r-md: 14px;
   --r-lg: 20px;
   --r-pill: 999px;
+
+  /* ---- One family for every control: buttons, chips, inputs. A control is 32px tall with
+   * 12px corners (a 28px small one has 10px); cards and dialogs are 16px. ---- */
+  --r-control: 12px;
+  --r-control-sm: 10px;
+  --r-card: 16px;
+  --r-sheet: 16px;
+  --h-control: 32px;
+  --h-control-sm: 28px;
+  --h-action: 36px; /* a dialog's Cancel / Save */
+  --hero-btn: var(--h-control); /* the ☰ and the drawer's actions */
 }
 
 /* Manual theme override. Flipping color-scheme is all light-dark() needs. */

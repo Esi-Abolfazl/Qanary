@@ -85,6 +85,7 @@ const CONFIG: Config = {
   hide_dock: false,
   status_icon: "rings",
   tray_filled: false,
+  tray_shape: "same",
   last_changelog_version: null,
 };
 
@@ -388,7 +389,17 @@ describe("App", () => {
     expect(second.container.querySelector(".hero")).toHaveClass("hero-offline");
     // No network on this machine: a refresh can't help, so the orb doesn't offer one.
     expect(screen.getByRole("button", { name: "Refresh" })).toBeDisabled();
-    expect(second.container.querySelector(".status-orb .orb-icon .orb-slash")).not.toBeNull();
+    // The Wi-Fi-off icon: three bold solid arcs that switch on in turn, a still "!" whose dot is the
+    // Wi-Fi's dot, and a soft shadow (a blurred strip) cut out of the arcs around the "!".
+    const wifi = second.container.querySelector(".status-orb .orb-icon");
+    expect(wifi).toHaveClass("off-wifi");
+    expect(wifi?.querySelectorAll(".sq1, .sq2, .sq3")).toHaveLength(3);
+    expect(wifi?.querySelector("mask")).not.toBeNull();
+    expect(wifi?.querySelector("filter feGaussianBlur")).not.toBeNull();
+    wifi?.querySelectorAll(".sq1, .sq2, .sq3").forEach((arc) => {
+      expect(arc.getAttribute("stroke-dasharray")).toBeNull();
+    });
+    expect(wifi?.querySelector(".orb-slash"), "no slash: the \"!\" is the mark now").toBeNull();
   });
 
   it("the ☰ opens Add list, Edit order and Settings, nearest first, and closes after a pick", async () => {
@@ -627,14 +638,18 @@ describe("App", () => {
       const icon = alarm.container.querySelector(".status-orb .orb-icon");
       expect(icon?.querySelector(".pulse-flat")).not.toBeNull();
       expect(icon?.querySelector(".pulse-x")).not.toBeNull();
+      // A soft shadow around the X fades the dashed line out near it.
+      const mask = icon?.querySelector(".pulse-flat")?.getAttribute("mask") ?? "";
+      expect(icon?.querySelector(mask.replace("url(", "").replace(")", ""))).not.toBeNull();
+      expect(icon?.querySelectorAll("mask ellipse")).toHaveLength(2);
       alarm.unmount();
 
       vi.mocked(api.getSnapshot).mockResolvedValue({ ...SNAPSHOT, overall: "red", cut_off: true });
       const offline = await renderPulse();
       await screen.findByText("You're offline");
       const off = offline.container.querySelector(".status-orb .orb-icon");
-      expect(off?.querySelector(".orb-slash")).not.toBeNull();
-      expect(off?.querySelectorAll(".rg")).toHaveLength(3);
+      expect(off).toHaveClass("off-wifi");
+      expect(off?.querySelectorAll(".sq1, .sq2, .sq3")).toHaveLength(3);
       expect(off?.querySelector(".pulse-flat")).toBeNull();
       expect(off?.querySelector(".pulse-x")).toBeNull();
     });
@@ -685,55 +700,147 @@ describe("App", () => {
     });
   });
 
-  describe("menu bar: outline or filled", () => {
+  describe("menu bar icon: its own picture, or the app's, and a Filled switch", () => {
     async function openSettings() {
       const user = userEvent.setup();
       render(<App />);
       await waitFor(() => screen.getByText("All clear"));
       await heroAction(user, /^settings$/i);
-      return { user, group: within(screen.getByRole("radiogroup", { name: "Menu bar" })) };
+      const trigger = screen.getByRole("button", { name: "Menu bar" });
+      const filledBtn = screen.getByRole("checkbox", { name: "Filled menubar icons" });
+      const openMenu = async () => {
+        await user.click(trigger);
+        return within(screen.getByRole("listbox", { name: "Menu bar" }));
+      };
+      return { user, trigger, filledBtn, openMenu };
     }
+    const looksOf = (el: HTMLElement) =>
+      new Set(
+        [...el.querySelectorAll("svg.tray-icon")].map(
+          (svg) => `${svg.getAttribute("data-icon")}/${svg.getAttribute("data-filled")}`,
+        ),
+      );
 
-    it("offers Outline and Filled of the chosen status icon, the saved one selected", async () => {
-      const { user, group } = await openSettings();
-      expect(group.getAllByRole("radio").map((r) => r.textContent)).toEqual(["Outline", "Filled"]);
-      expect(group.getByRole("radio", { name: "Outline" })).toHaveAttribute("aria-checked", "true");
-      const looks = () =>
-        group.getAllByRole("radio").map((r) => {
-          const svg = r.querySelector("svg.tray-icon")!;
-          return `${svg.getAttribute("data-icon")}/${svg.getAttribute("data-filled")}`;
-        });
-      expect(looks()).toEqual(["rings/false", "rings/true"]);
+    it("is a dropdown of three pictures plus a Filled switch, the saved look shown", async () => {
+      const { trigger, filledBtn, openMenu } = await openSettings();
+      // Closed: the five states of the effective look (the app's Rings, not filled).
+      expect(screen.queryByRole("listbox")).toBeNull();
+      expect(looksOf(trigger)).toEqual(new Set(["rings/false"]));
+      expect(trigger.querySelectorAll("svg.tray-icon")).toHaveLength(5);
+      expect(filledBtn).not.toBeChecked();
 
-      const icons = within(screen.getByRole("radiogroup", { name: "Status icon" }));
-      await user.click(icons.getByRole("radio", { name: /pulse/i }));
-      expect(looks()).toEqual(["pulse/false", "pulse/true"]);
+      const menu = await openMenu();
+      expect(menu.getAllByRole("option").map((o) => o.querySelector("b")?.textContent)).toEqual([
+        "Same as app",
+        "Pulse",
+        "Rings",
+      ]);
+      expect(menu.getByRole("option", { name: /^Same as app/ })).toHaveAttribute("aria-selected", "true");
     });
 
-    it("is saved with the rest of the form", async () => {
-      vi.mocked(api.updateSettings).mockResolvedValue({ ...CONFIG, tray_filled: true });
-      const { user, group } = await openSettings();
-      await user.click(group.getByRole("radio", { name: "Filled" }));
-      expect(group.getByRole("radio", { name: "Filled" })).toHaveAttribute("aria-checked", "true");
+    it("Escape closes the menu without choosing", async () => {
+      const { user, openMenu } = await openSettings();
+      await openMenu();
+      await user.keyboard("{Escape}");
+      expect(screen.queryByRole("listbox")).toBeNull();
+    });
+
+    it("'Same as app' follows the status icon; Pulse and Rings keep their own picture", async () => {
+      const { user, openMenu } = await openSettings();
+      const icons = within(screen.getByRole("radiogroup", { name: "Status icon" }));
+      await user.click(icons.getByRole("radio", { name: /pulse/i }));
+
+      const menu = await openMenu();
+      expect(looksOf(menu.getByRole("option", { name: /^Same as app/ }))).toEqual(new Set(["pulse/false"]));
+      expect(looksOf(menu.getByRole("option", { name: /^Pulse/ }))).toEqual(new Set(["pulse/false"]));
+      expect(looksOf(menu.getByRole("option", { name: /^Rings/ }))).toEqual(new Set(["rings/false"]));
+    });
+
+    it("the Filled switch flips every look, in the box and in the menu", async () => {
+      const { user, trigger, filledBtn, openMenu } = await openSettings();
+      await user.click(filledBtn);
+      expect(filledBtn).toBeChecked();
+      expect(looksOf(trigger)).toEqual(new Set(["rings/true"]));
+      const menu = await openMenu();
+      expect(looksOf(menu.getByRole("option", { name: /^Pulse/ }))).toEqual(new Set(["pulse/true"]));
+      await user.keyboard("{Escape}");
+
+      await user.click(filledBtn);
+      expect(filledBtn).not.toBeChecked();
+      expect(looksOf(trigger)).toEqual(new Set(["rings/false"]));
+    });
+
+    it("lets the menu bar differ from the orb, and saves both with the rest of the form", async () => {
+      vi.mocked(api.updateSettings).mockResolvedValue({ ...CONFIG, tray_shape: "pulse", tray_filled: true });
+      const { user, filledBtn, openMenu } = await openSettings();
+      const menu = await openMenu();
+      await user.click(menu.getByRole("option", { name: /^Pulse/ }));
+      expect(screen.queryByRole("listbox")).toBeNull();
+      await user.click(filledBtn);
       expect(api.updateSettings).not.toHaveBeenCalled();
 
       await user.click(screen.getByRole("button", { name: /^save$/i }));
       await waitFor(() =>
         expect(api.updateSettings).toHaveBeenCalledWith(
-          expect.objectContaining({ status_icon: "rings", tray_filled: true }),
+          // The orb stays Rings; only the menu bar is Pulse, filled.
+          expect.objectContaining({ status_icon: "rings", tray_shape: "pulse", tray_filled: true }),
+        ),
+      );
+    });
+
+    it("choosing a picture keeps the Filled choice, and 'Same as app' goes back to following the orb", async () => {
+      vi.mocked(api.getConfig).mockResolvedValue({ ...CONFIG, tray_shape: "pulse", tray_filled: true });
+      vi.mocked(api.updateSettings).mockResolvedValue(CONFIG);
+      const { user, filledBtn, openMenu } = await openSettings();
+      expect(filledBtn).toBeChecked();
+      const menu = await openMenu();
+      expect(menu.getByRole("option", { name: /^Pulse/ })).toHaveAttribute("aria-selected", "true");
+      await user.click(menu.getByRole("option", { name: /^Same as app/ }));
+      expect(filledBtn).toBeChecked();
+      await user.click(screen.getByRole("button", { name: /^save$/i }));
+      await waitFor(() =>
+        expect(api.updateSettings).toHaveBeenCalledWith(
+          expect.objectContaining({ tray_shape: "same", tray_filled: true }),
         ),
       );
     });
 
     it("Cancel discards a pending choice", async () => {
-      const { user, group } = await openSettings();
-      await user.click(group.getByRole("radio", { name: "Filled" }));
+      const { user, filledBtn, openMenu } = await openSettings();
+      const menu = await openMenu();
+      await user.click(menu.getByRole("option", { name: /^Pulse/ }));
+      await user.click(filledBtn);
       await user.click(screen.getByRole("button", { name: /^cancel$/i }));
       expect(api.updateSettings).not.toHaveBeenCalled();
 
       await heroAction(user, /^settings$/i);
-      const again = within(screen.getByRole("radiogroup", { name: "Menu bar" }));
-      expect(again.getByRole("radio", { name: "Outline" })).toHaveAttribute("aria-checked", "true");
+      expect(screen.getByRole("checkbox", { name: "Filled menubar icons" })).not.toBeChecked();
+      await user.click(screen.getByRole("button", { name: "Menu bar" }));
+      const again = within(screen.getByRole("listbox", { name: "Menu bar" }));
+      expect(again.getByRole("option", { name: /^Same as app/ })).toHaveAttribute("aria-selected", "true");
+    });
+  });
+
+  describe("the '?' next to the status icon", () => {
+    it("shows what each state looks like for the chosen icon, and closes on Escape", async () => {
+      const user = userEvent.setup();
+      render(<App />);
+      await waitFor(() => screen.getByText("All clear"));
+      await heroAction(user, /^settings$/i);
+
+      expect(screen.queryByRole("dialog", { name: /what each state looks like/i })).toBeNull();
+      await user.click(screen.getByRole("button", { name: /what do the icons mean/i }));
+      const pop = screen.getByRole("dialog", { name: /what each state looks like/i });
+      expect(within(pop).getAllByText(/^(All clear|Heads up|Alarm|Offline|Checking)$/)).toHaveLength(5);
+      expect(pop.querySelectorAll(".orb-icon-rings")).toHaveLength(5);
+
+      // It follows the picker: choose Pulse and the same five states are drawn as heartbeats.
+      const icons = within(screen.getByRole("radiogroup", { name: "Status icon" }));
+      await user.click(icons.getByRole("radio", { name: /pulse/i }));
+      expect(pop.querySelectorAll(".orb-icon-pulse")).toHaveLength(5);
+
+      await user.keyboard("{Escape}");
+      expect(screen.queryByRole("dialog", { name: /what each state looks like/i })).toBeNull();
     });
   });
 

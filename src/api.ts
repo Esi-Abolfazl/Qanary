@@ -86,6 +86,7 @@ export type SettingsPatch = Partial<
     | "hide_dock"
     | "status_icon"
     | "tray_filled"
+    | "tray_shape"
   >
 >;
 
