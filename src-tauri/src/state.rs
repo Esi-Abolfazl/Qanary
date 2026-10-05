@@ -7,7 +7,7 @@
 
 use crate::models::{Config, Snapshot, WanInfo};
 use std::path::PathBuf;
-use std::sync::atomic::AtomicU64;
+use std::sync::atomic::{AtomicBool, AtomicU64};
 use std::sync::{Arc, Mutex};
 use tauri::async_runtime::JoinHandle;
 use tokio::sync::{broadcast, Notify, Semaphore};
@@ -32,8 +32,8 @@ pub struct AppState {
     /// Shared concurrency cap: every Service probe task acquires endpoint permits here, so N
     /// tasks can't open N×endpoints sockets at once.
     pub probe_sem: Arc<Semaphore>,
-    /// "Probe now" fan-out: `refresh_now` sends `()`, every Service probe task (and the WAN task)
-    /// is subscribed and wakes immediately. Broadcast = one sender, many receivers.
+    /// "Probe now" fan-out: every Service probe task (and the WAN task) is subscribed and wakes
+    /// immediately. Broadcast = one sender, many receivers.
     pub probe_now: broadcast::Sender<()>,
     /// Handles to the live Service probe tasks. The supervisor aborts these before respawning, so
     /// a config change replaces the whole task set without leaking the old ones.
@@ -42,6 +42,11 @@ pub struct AppState {
     /// `abort()` only lands at an await, so a task already past its probe could otherwise
     /// overwrite the fresh Checking snapshot with a result for the old config.
     pub generation: AtomicU64,
+    /// Sites known to block this IP (ADR-0051). Cleared when the IP or the network changes or the
+    /// internet drops, so a block is asked about once, not on every refresh.
+    pub block_memory: crate::probe::BlockMemory,
+    /// Whether the last snapshot was cut off; the memory is cleared on the way in.
+    pub was_cut_off: AtomicBool,
     /// Wakes the WAN task early, e.g. when the IP providers change.
     pub wan_now: Notify,
     /// Set at startup when `config.json` was unusable and moved aside; taken once by the UI.

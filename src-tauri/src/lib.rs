@@ -142,6 +142,8 @@ pub fn run() {
                 probe_now,
                 tasks: Mutex::new(Vec::new()),
                 generation: std::sync::atomic::AtomicU64::new(0),
+                block_memory: probe::BlockMemory::default(),
+                was_cut_off: std::sync::atomic::AtomicBool::new(false),
                 wan_now: tokio::sync::Notify::new(),
                 load_warning: Mutex::new(load_warning),
             });

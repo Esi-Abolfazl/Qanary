@@ -2353,6 +2353,41 @@ body {
   line-height: 1.5;
   resize: vertical;
 }
+.modal-block-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.modal-block-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+}
+.modal-block-label em {
+  font-style: normal;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+.modal-help {
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid var(--border, currentColor);
+  background: transparent;
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 11px;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+}
+.modal-help[aria-expanded="true"] {
+  color: var(--text-strong);
+}
 .modal-hint {
   font-size: 12px;
   line-height: 1.45;

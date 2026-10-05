@@ -1,6 +1,7 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import { endpointsToText, parseEndpoints, parseServiceLines } from "../utils/parseServices";
 import type { Service, ServiceDraft } from "../types";
+import { Switch } from "./Switch";
 
 /**
  * Add/edit modal for services.
@@ -26,12 +27,16 @@ export function ServiceModal({
   const [text, setText] = useState("");
   const [label, setLabel] = useState(initial?.label ?? "");
   const [hosts, setHosts] = useState(initial ? endpointsToText(initial.endpoints) : "");
+  const [checkBlock, setCheckBlock] = useState(initial?.check_block ?? false);
+  const [helpOpen, setHelpOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const blockId = useId();
 
   useEffect(() => {
     setLabel(initial?.label ?? "");
     setHosts(initial ? endpointsToText(initial.endpoints) : "");
+    setCheckBlock(initial?.check_block ?? false);
     setError("");
   }, [initial]);
 
@@ -44,7 +49,9 @@ export function ServiceModal({
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
-    const { drafts, invalid } = parse();
+    const parsed = parse();
+    const { invalid } = parsed;
+    const drafts = parsed.drafts.map((d) => ({ ...d, check_block: checkBlock }));
     if (invalid.length > 0) {
       setError(`Can't read: ${invalid.join(" · ")}`);
       return;
@@ -111,6 +118,32 @@ export function ServiceModal({
                 />
               </div>
             </>
+          )}
+          <div className="modal-block-row">
+            <span className="modal-block-label">
+              <label htmlFor={blockId}>
+                Check Cloudflare block <em>(experimental)</em>
+              </label>
+              <button
+                type="button"
+                className="modal-help"
+                aria-expanded={helpOpen}
+                aria-label="What does this do?"
+                title="What does this do?"
+                onClick={() => setHelpOpen((o) => !o)}
+              >
+                ?
+              </button>
+            </span>
+            <Switch id={blockId} checked={checkBlock} onChange={setCheckBlock} />
+          </div>
+          {helpOpen && (
+            <p className="modal-hint modal-block-help" role="note">
+              Some sites behind Cloudflare or Akamai refuse your IP (a VPN's, often) and show a "you have been
+              blocked" page. Normally Qanary still counts that as Up. With this on, when the site answers 403,
+              Qanary reads that page once and marks the site Blocked if it is a block page. It reads again only
+              after your IP or network changes, so it adds almost no traffic.
+            </p>
           )}
           {error && <p className="modal-error">{error}</p>}
           <p className="modal-hint">

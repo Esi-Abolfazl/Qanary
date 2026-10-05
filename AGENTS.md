@@ -13,7 +13,8 @@ Full v1 design: `.claude/plans/qanary-v1.md` (local only — `.claude/` is gitig
 ## Stack
 
 - **Tauri v2** (Rust backend) + **React + Vite + TypeScript** frontend.
-- Probe = TCP connect + HTTPS HEAD (classify Up / Blocked / Down).
+- Probe = TCP connect + HTTPS HEAD (classify Up / Blocked / Down), plus an opt-in GET that reads a
+  Cloudflare/Akamai block page once per IP (ADR-0051).
 - Storage: JSON in app config dir (`~/Library/Application Support/Qanary/config.json` on mac).
 - mac first; Windows/Linux + tray/widget later (same codebase).
 
@@ -87,7 +88,7 @@ always in this order:
 - Location: `docs/adr/` (in the project root, checked into git).
 - Template: `docs/adr/_TEMPLATE.md`.
 - Numbering: 4-digit zero-padded, continuing from highest existing file.
-- Current highest: 0048 (a TCP-only endpoint never keeps a list up).
+- Current highest: the largest number in `docs/adr/`; open PRs may already hold the next ones, so check them before picking a number.
 
 ## TODO
 

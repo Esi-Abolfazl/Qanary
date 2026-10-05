@@ -154,6 +154,29 @@ describe("App", () => {
     await waitFor(() => expect(screen.getByText("Internet")).toBeInTheDocument());
   });
 
+  it("a site that answered with a CDN's block page says so, not just 'Blocked'", async () => {
+    const blocked = (cause?: "cloudflare" | "akamai") => ({
+      ...SNAPSHOT,
+      lists: [{ ...SNAPSHOT.lists[0], services: [{ ...SNAPSHOT.lists[0].services[0], state: "blocked" as const,
+        endpoints: [{ id: "e1", host: "google.com", state: "blocked" as const, latency_ms: 20, cause }] }] }],
+    });
+    vi.mocked(api.getSnapshot).mockResolvedValue(blocked("cloudflare"));
+    const first = render(<App />);
+    expect(await screen.findByTitle(/Blocked by Cloudflare/)).toBeInTheDocument();
+    first.unmount();
+
+    vi.mocked(api.getSnapshot).mockResolvedValue(blocked("akamai"));
+    const second = render(<App />);
+    expect(await screen.findByTitle(/Blocked by Akamai/)).toBeInTheDocument();
+    second.unmount();
+
+    // Without a cause it is the generic interception text.
+    vi.mocked(api.getSnapshot).mockResolvedValue(blocked());
+    render(<App />);
+    expect(await screen.findByTitle(/likely interception/)).toBeInTheDocument();
+    expect(screen.queryByTitle(/Blocked by Cloudflare/)).toBeNull();
+  });
+
   it("shows the startup config-recovery warning once and lets the user dismiss it", async () => {
     const user = userEvent.setup();
     vi.mocked(api.takeLoadWarning).mockResolvedValue("Your settings file isn't valid.");
@@ -220,7 +243,61 @@ describe("App", () => {
 
     expect(api.updateService).toHaveBeenCalledWith("internet", "s1", "google.com", [
       { host: "google.com" },
-    ]);
+    ], false);
+  });
+
+  describe("the experimental Cloudflare block check", () => {
+    const withService = (check_block?: boolean) => ({
+      ...CONFIG,
+      lists: [{
+        id: "internet", name: "Internet", icon: "🌐", collapsed: false, critical: false,
+        services: [{
+          id: "s1", label: "google.com", enabled: true, check_block,
+          endpoints: [{ id: "e1", host: "google.com", port: 443 }],
+        }],
+      }],
+    });
+
+    it("is off by default, explained by the ?, and sent when switched on while editing", async () => {
+      const user = userEvent.setup();
+      vi.mocked(api.getConfig).mockResolvedValue(withService());
+      vi.mocked(api.updateService).mockResolvedValue(CONFIG);
+      render(<App />);
+      await waitFor(() => screen.getByText("All clear"));
+      await user.click(screen.getByTitle("Service options"));
+      await user.click(screen.getByRole("button", { name: /^edit$/i }));
+
+      const sw = screen.getByRole("checkbox", { name: /check cloudflare block/i });
+      expect(sw).not.toBeChecked();
+      expect(screen.getByText(/experimental/i)).toBeInTheDocument();
+      expect(screen.queryByRole("note")).toBeNull();
+      await user.click(screen.getByRole("button", { name: /what does this do/i }));
+      expect(screen.getByRole("note")).toHaveTextContent(/reads again only after your ip or network changes/i);
+
+      await user.click(sw);
+      await user.click(screen.getByRole("button", { name: /^save$/i }));
+      expect(api.updateService).toHaveBeenCalledWith("internet", "s1", "google.com", [{ host: "google.com" }], true);
+    });
+
+    it("shows a service that already has it on, and adding a service can opt in", async () => {
+      const user = userEvent.setup();
+      vi.mocked(api.getConfig).mockResolvedValue(withService(true));
+      vi.mocked(api.addServices).mockResolvedValue(CONFIG);
+      render(<App />);
+      await waitFor(() => screen.getByText("All clear"));
+      await user.click(screen.getByTitle("Service options"));
+      await user.click(screen.getByRole("button", { name: /^edit$/i }));
+      expect(screen.getByRole("checkbox", { name: /check cloudflare block/i })).toBeChecked();
+      await user.click(screen.getByRole("button", { name: /^cancel$/i }));
+
+      await user.click(screen.getByTitle("Add service"));
+      await user.type(screen.getByLabelText("Services"), "Site: strem.fun");
+      await user.click(screen.getByRole("checkbox", { name: /check cloudflare block/i }));
+      await user.click(screen.getByRole("button", { name: /^add$/i }));
+      expect(api.addServices).toHaveBeenCalledWith("internet", [
+        expect.objectContaining({ label: "Site", check_block: true }),
+      ]);
+    });
   });
 
   // A05: collapse lived in ServiceList local state, so remounting it (reorder mode) reverted it.

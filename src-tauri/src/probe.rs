@@ -12,12 +12,20 @@
 //!
 //! Known limitation: a block page that returns HTTP 200 over a *valid* cert can't be told apart
 //! from the real site by this method; it will read as `Up`.
+//!
+//! One exception, opt-in per service (`Service::check_block`, experimental): a CDN's own block page
+//! (Cloudflare's "Sorry, you have been blocked", Akamai's "Access Denied", both HTTP 403) — what a
+//! VPN's IP often gets. When such a HEAD answers 403 from `server: cloudflare` or `AkamaiGHost`,
+//! one small GET reads the page, and a match reads as `Blocked` with a `cause`. That is asked once
+//! per host and IP: the answer, blocked or clear, is remembered (`BlockMemory`) until the IP or the
+//! network changes or the internet drops (ADR-0051).
 
 use crate::models::{
-    Config, EndpointStatus, ListStatus, Service, ServiceState, ServiceStatus, Severity, Snapshot,
+    BlockCause, Config, EndpointStatus, ListStatus, Service, ServiceState, ServiceStatus, Severity, Snapshot,
     worst_state,
 };
-use std::sync::Arc;
+use std::collections::HashMap;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tokio::net::TcpStream;
 use tokio::sync::Semaphore;
@@ -38,6 +46,150 @@ pub fn classify(tcp_ok: bool, http_ok: bool) -> ServiceState {
         (true, true) => ServiceState::Up,
         (true, false) => ServiceState::Blocked,
     }
+}
+
+/// How much of a block page to read: Cloudflare's says it in the first couple of KB.
+const BLOCK_PAGE_BYTES: usize = 16 * 1024;
+
+/// What was found for a host behind a CDN, for the current IP.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Known {
+    /// Its 403 is a CDN block page.
+    Blocked(BlockCause),
+    /// Its 403 was read and is not a block page.
+    Clear,
+}
+
+#[derive(Default)]
+struct MemoryInner {
+    /// Bumped by every `clear`: a probe that started before it must not write its (old-network)
+    /// answer into the new one.
+    epoch: u64,
+    found: HashMap<String, Known>,
+}
+
+/// What was found, by `host:port`, for the current IP. In memory only: a restart starts empty.
+/// Cloned cheaply (shared inside).
+#[derive(Clone, Default)]
+pub struct BlockMemory(Arc<Mutex<MemoryInner>>);
+
+impl BlockMemory {
+    fn key(host: &str, port: u16) -> String {
+        format!("{host}:{port}")
+    }
+    /// The memory's generation. A probe takes it before it touches the network and hands it back
+    /// when it writes, so an answer from before a `clear` is dropped.
+    pub fn epoch(&self) -> u64 {
+        self.0.lock().unwrap().epoch
+    }
+    pub fn get(&self, host: &str, port: u16) -> Option<Known> {
+        self.0.lock().unwrap().found.get(&Self::key(host, port)).copied()
+    }
+    /// Remember an answer, unless the memory was cleared since `epoch`.
+    pub fn remember(&self, host: &str, port: u16, known: Known, epoch: u64) {
+        let mut m = self.0.lock().unwrap();
+        if m.epoch == epoch {
+            m.found.insert(Self::key(host, port), known);
+        }
+    }
+    /// Forget a host, unless the memory was cleared since `epoch`.
+    pub fn forget(&self, host: &str, port: u16, epoch: u64) {
+        let mut m = self.0.lock().unwrap();
+        if m.epoch == epoch {
+            m.found.remove(&Self::key(host, port));
+        }
+    }
+    /// The IP or the network changed, or the internet dropped: read again on the next probe.
+    pub fn clear(&self) {
+        let mut m = self.0.lock().unwrap();
+        m.epoch += 1;
+        m.found.clear();
+    }
+}
+
+/// What to do about a service's block page check, for one probe.
+#[derive(Clone)]
+pub struct BlockCheck {
+    pub memory: BlockMemory,
+}
+
+/// What one probe makes of an answer.
+#[derive(Debug, PartialEq)]
+pub enum Verdict {
+    /// Not a block (or already read and clear): no request.
+    Up,
+    /// Already known to block this IP: no request.
+    Blocked(BlockCause),
+    /// A 403 from a CDN not read yet for this IP: read the page.
+    Read,
+}
+
+/// `cdn` is the CDN that sent a 403 (`None` for any other answer); `remembered` is what was found
+/// for this host already.
+pub fn verdict(cdn: Option<BlockCause>, remembered: Option<Known>) -> Verdict {
+    match (cdn, remembered) {
+        (None, _) => Verdict::Up,
+        (Some(c), Some(Known::Blocked(k))) if c == k => Verdict::Blocked(c),
+        (Some(_), Some(Known::Clear)) => Verdict::Up,
+        (Some(_), _) => Verdict::Read,
+    }
+}
+
+/// Clear the memory the moment the app becomes cut off (the internet dropped); a later
+/// reconnect reads again. `was_cut_off` is the previous state.
+pub fn note_cut_off(was_cut_off: &std::sync::atomic::AtomicBool, memory: &BlockMemory, cut_off: bool) {
+    use std::sync::atomic::Ordering::SeqCst;
+    if cut_off {
+        if !was_cut_off.swap(true, SeqCst) {
+            memory.clear();
+        }
+    } else {
+        was_cut_off.store(false, SeqCst);
+    }
+}
+
+/// Which CDN, if any, answers with this `server` header. Only these can send a block page we know.
+fn cdn_of(server: Option<&str>) -> Option<BlockCause> {
+    let server = server?.to_ascii_lowercase();
+    if server == "cloudflare" {
+        Some(BlockCause::Cloudflare)
+    } else if server.contains("akamai") {
+        Some(BlockCause::Akamai)
+    } else {
+        None
+    }
+}
+
+/// The CDN whose "you are blocked" page this is: HTTP 403 from that CDN, whose body says so
+/// (Cloudflare: "you have been blocked"; Akamai: "Access Denied" with a "Reference #"). A challenge
+/// ("Checking your browser"), a plain 403 and any 5xx are not blocks.
+pub fn block_cause(status: u16, server: Option<&str>, body: &str) -> Option<BlockCause> {
+    if status != 403 {
+        return None;
+    }
+    match cdn_of(server)? {
+        BlockCause::Cloudflare => {
+            (body.contains("you have been blocked") || body.contains("Access denied"))
+                .then_some(BlockCause::Cloudflare)
+        }
+        BlockCause::Akamai => (body.contains("Access Denied") && body.contains("Reference"))
+            .then_some(BlockCause::Akamai),
+    }
+}
+
+/// Fetch the start of the page the HEAD just got a 403 for, and see if it is a CDN's block page.
+async fn block_page_cause(client: &reqwest::Client, url: &str) -> Option<BlockCause> {
+    let mut resp = client.get(url).send().await.ok()?;
+    let server = resp.headers().get("server").and_then(|v| v.to_str().ok()).map(str::to_owned);
+    let status = resp.status().as_u16();
+    let mut body = Vec::new();
+    while body.len() < BLOCK_PAGE_BYTES {
+        match resp.chunk().await {
+            Ok(Some(chunk)) => body.extend_from_slice(&chunk),
+            _ => break,
+        }
+    }
+    block_cause(status, server.as_deref(), &String::from_utf8_lossy(&body))
 }
 
 /// Resolve a stored host for probing.
@@ -66,7 +218,10 @@ async fn probe_endpoint(
     host: &str,
     port: u16,
     timeout_ms: u64,
-) -> (ServiceState, Option<u64>) {
+    block: Option<&BlockCheck>,
+) -> (ServiceState, Option<u64>, Option<BlockCause>) {
+    // Taken before any network I/O: an answer that outlives a network change is not remembered.
+    let epoch = block.map(|b| b.memory.epoch());
     // For wildcard endpoints (`*.host.com`), synthesise a random concrete subdomain.
     // This ensures we probe a name wildcard DNS actually resolves rather than the bare
     // apex, which often has no server.  Display always shows the stored literal (set by
@@ -88,14 +243,14 @@ async fn probe_endpoint(
     let tcp_ms = started.elapsed().as_millis() as u64;
 
     if !tcp_ok {
-        return (ServiceState::Down, None);
+        return (ServiceState::Down, None, None);
     }
 
     // Wildcard endpoints stop at TCP: the synthesised subdomain almost never matches the
     // zone's TLS cert, so an HTTPS probe would falsely read as Blocked. TCP reaching the
     // zone is the honest signal here → Reachable (blue). No latency (HTTPS path not run).
     if is_wildcard {
-        return (ServiceState::Reachable, None);
+        return (ServiceState::Reachable, None, None);
     }
 
     // 2. TCP worked — does the HTTPS layer answer? Any response (even 4xx/5xx) counts as Up.
@@ -104,7 +259,35 @@ async fn probe_endpoint(
     } else {
         format!("https://{target}:{port}/")
     };
-    let http_ok = client.head(&url).send().await.is_ok();
+    let head = client.head(&url).send().await;
+    let http_ok = head.is_ok();
+    // Opt-in: a 403 from a known CDN may be its block page (the server answered, but refused us).
+    let walled = match block {
+        None => None,
+        Some(b) => {
+            let cdn = match &head {
+                Ok(r) if r.status().as_u16() == 403 => {
+                    cdn_of(r.headers().get("server").and_then(|v| v.to_str().ok()))
+                }
+                _ => None,
+            };
+            match verdict(cdn, b.memory.get(host, port)) {
+                Verdict::Blocked(c) => Some(c),
+                Verdict::Read => {
+                    let found = block_page_cause(client, &url).await;
+                    eprintln!("blockcheck: read {host}:{port} -> {found:?}"); // observable for manual tests
+                    b.memory.remember(host, port, found.map_or(Known::Clear, Known::Blocked), epoch.unwrap_or(0));
+                    found
+                }
+                Verdict::Up => {
+                    if cdn.is_none() {
+                        b.memory.forget(host, port, epoch.unwrap_or(0)); // the block lifted
+                    }
+                    None
+                }
+            }
+        }
+    };
 
     // Up → full-path latency through the completed HEAD (TLS handshake included).
     // Blocked → fall back to TCP-only time (the HEAD failed, so its elapsed is noise).
@@ -114,7 +297,11 @@ async fn probe_endpoint(
         tcp_ms
     });
 
-    (classify(tcp_ok, http_ok), latency_ms)
+    if let Some(cause) = walled {
+        // The server answered, so the latency is a real one.
+        return (ServiceState::Blocked, latency_ms, Some(cause));
+    }
+    (classify(tcp_ok, http_ok), latency_ms, None)
 }
 
 /// True when the user can't reach **anything** — endpoint-granular across every List/Service:
@@ -181,6 +368,7 @@ pub fn checking_lists(config: &Config) -> Vec<ListStatus> {
                             host: ep.host.clone(),
                             state: ServiceState::Checking,
                             latency_ms: None,
+                            cause: None,
                         })
                         .collect();
                     ServiceStatus {
@@ -230,9 +418,11 @@ pub async fn probe_service(
     client: &reqwest::Client,
     sem: &Arc<Semaphore>,
     timeout_ms: u64,
+    memory: &BlockMemory,
 ) -> ServiceStatus {
+    let block = svc.check_block.then(|| BlockCheck { memory: memory.clone() });
     let ep_statuses =
-        probe_service_endpoints(svc.id.as_str(), &svc.endpoints, client, sem, timeout_ms).await;
+        probe_service_endpoints(svc.id.as_str(), &svc.endpoints, client, sem, timeout_ms, block).await;
     let svc_state = worst_state(&ep_statuses.iter().map(|e| e.state).collect::<Vec<_>>());
     ServiceStatus {
         id: svc.id.clone(),
@@ -249,25 +439,27 @@ async fn probe_service_endpoints(
     client: &reqwest::Client,
     semaphore: &Arc<Semaphore>,
     timeout_ms: u64,
+    block: Option<BlockCheck>,
 ) -> Vec<EndpointStatus> {
-    let mut set: JoinSet<(usize, ServiceState, Option<u64>)> = JoinSet::new();
+    let mut set: JoinSet<(usize, ServiceState, Option<u64>, Option<BlockCause>)> = JoinSet::new();
 
     for (idx, ep) in endpoints.iter().enumerate() {
         let permit = Arc::clone(semaphore);
         let client = client.clone();
         let host = ep.host.clone();
         let port = ep.port;
+        let block = block.clone();
         set.spawn(async move {
             let _guard = permit.acquire().await.expect("semaphore open");
-            let (state, latency) = probe_endpoint(&client, &host, port, timeout_ms).await;
-            (idx, state, latency)
+            let (state, latency, cause) = probe_endpoint(&client, &host, port, timeout_ms, block.as_ref()).await;
+            (idx, state, latency, cause)
         });
     }
 
-    let mut collected: Vec<Option<(ServiceState, Option<u64>)>> = vec![None; endpoints.len()];
+    let mut collected: Vec<Option<(ServiceState, Option<u64>, Option<BlockCause>)>> = vec![None; endpoints.len()];
     while let Some(joined) = set.join_next().await {
-        if let Ok((idx, state, latency)) = joined {
-            collected[idx] = Some((state, latency));
+        if let Ok((idx, state, latency, cause)) = joined {
+            collected[idx] = Some((state, latency, cause));
         }
     }
 
@@ -275,12 +467,13 @@ async fn probe_service_endpoints(
         .iter()
         .enumerate()
         .map(|(idx, ep)| {
-            let (state, latency_ms) = collected[idx].unwrap_or((ServiceState::Checking, None));
+            let (state, latency_ms, cause) = collected[idx].unwrap_or((ServiceState::Checking, None, None));
             EndpointStatus {
                 id: ep.id.clone(),
                 host: ep.host.clone(),
                 state,
                 latency_ms,
+                cause,
             }
         })
         .collect()
@@ -297,6 +490,7 @@ mod tests {
             host: "h".into(),
             state,
             latency_ms: None,
+            cause: None,
         }
     }
 
@@ -335,6 +529,84 @@ mod tests {
         assert_eq!(classify(false, true), ServiceState::Down);
         assert_eq!(classify(true, true), ServiceState::Up);
         assert_eq!(classify(true, false), ServiceState::Blocked);
+    }
+
+    /// A CDN's block page is a 403 from that CDN that says so; a challenge, a plain 403, a 5xx error
+    /// page or another server's 403 is not.
+    #[test]
+    fn cdn_block_pages_are_recognised() {
+        let cf = "<title>Attention Required! | Cloudflare</title><h2>Sorry, you have been blocked</h2>";
+        let akamai = "<H1>Access Denied</H1> You don't have permission to access this server. Reference&#32;&#35;18.2";
+        assert_eq!(block_cause(403, Some("cloudflare"), cf), Some(BlockCause::Cloudflare));
+        assert_eq!(block_cause(403, Some("Cloudflare"), "<h1>Access denied</h1> 1020"), Some(BlockCause::Cloudflare));
+        assert_eq!(block_cause(403, Some("AkamaiGHost"), akamai), Some(BlockCause::Akamai));
+        assert_eq!(block_cause(403, Some("cloudflare"), "Just a moment... Checking your browser"), None);
+        assert_eq!(block_cause(403, Some("AkamaiGHost"), "Forbidden"), None);
+        assert_eq!(block_cause(403, Some("cloudflare"), "Forbidden"), None);
+        assert_eq!(block_cause(520, Some("cloudflare"), cf), None, "only a 403 is a block");
+        assert_eq!(block_cause(403, Some("nginx"), cf), None, "not from a known CDN");
+        assert_eq!(block_cause(403, Some("cloudflare"), akamai), None, "each CDN's own wording");
+        assert_eq!(block_cause(403, None, cf), None);
+    }
+
+    /// Read once per IP: an unread 403 is read, a known answer (block or clear) costs no request, and
+    /// an answer that is not a CDN 403 is just Up.
+    #[test]
+    fn a_403_is_read_once_per_ip() {
+        use BlockCause::*;
+        let blocked = Some(Known::Blocked(Cloudflare));
+        assert_eq!(verdict(Some(Cloudflare), None), Verdict::Read, "never read for this IP");
+        assert_eq!(verdict(Some(Cloudflare), blocked), Verdict::Blocked(Cloudflare), "known block: no GET");
+        assert_eq!(verdict(Some(Cloudflare), Some(Known::Clear)), Verdict::Up, "read and clear: no GET");
+        assert_eq!(verdict(Some(Akamai), blocked), Verdict::Read, "another CDN answers now");
+        assert_eq!(verdict(None, blocked), Verdict::Up, "no 403 any more: the block lifted");
+        assert_eq!(verdict(None, None), Verdict::Up);
+    }
+
+    #[test]
+    fn block_memory_is_per_host_and_port_and_clears() {
+        let m = BlockMemory::default();
+        let blocked = Known::Blocked(BlockCause::Cloudflare);
+        let e = m.epoch();
+        m.remember("a.com", 443, blocked, e);
+        assert_eq!(m.get("a.com", 443), Some(blocked));
+        assert_eq!(m.get("a.com", 8443), None);
+        assert_eq!(m.get("b.com", 443), None);
+        m.remember("b.com", 443, Known::Clear, e);
+        assert_eq!(m.get("b.com", 443), Some(Known::Clear));
+        m.forget("a.com", 443, e);
+        assert_eq!(m.get("a.com", 443), None);
+        m.clone().clear(); // a clone shares the same map
+        assert_eq!(m.get("b.com", 443), None);
+    }
+
+    /// A probe that began before the network changed must not write its answer afterwards: that
+    /// answer is about the old route (a VPN's IP) and would shadow the new one.
+    #[test]
+    fn an_answer_from_before_a_clear_is_dropped() {
+        let m = BlockMemory::default();
+        let started = m.epoch(); // a probe begins on the VPN
+        m.clear(); // the VPN is switched off
+        m.remember("a.com", 443, Known::Blocked(BlockCause::Cloudflare), started);
+        assert_eq!(m.get("a.com", 443), None, "the old answer is not kept");
+        m.remember("a.com", 443, Known::Clear, m.epoch());
+        m.forget("a.com", 443, started); // a stale forget changes nothing either
+        assert_eq!(m.get("a.com", 443), Some(Known::Clear));
+    }
+
+    /// The memory is dropped when the app turns cut off, once, and not while it stays so.
+    #[test]
+    fn going_cut_off_clears_the_block_memory_once() {
+        let (flag, m) = (std::sync::atomic::AtomicBool::new(false), BlockMemory::default());
+        let blocked = Known::Blocked(BlockCause::Cloudflare);
+        m.remember("a.com", 443, blocked, m.epoch());
+        note_cut_off(&flag, &m, false);
+        assert_eq!(m.get("a.com", 443), Some(blocked), "online: kept");
+        note_cut_off(&flag, &m, true);
+        assert_eq!(m.get("a.com", 443), None, "cut off: cleared");
+        m.remember("a.com", 443, blocked, m.epoch());
+        note_cut_off(&flag, &m, true);
+        assert_eq!(m.get("a.com", 443), Some(blocked), "still cut off: not cleared again");
     }
 
     #[test]
@@ -385,7 +657,7 @@ mod tests {
         let svc = Service::with_endpoints("W", vec![Endpoint::new("*.127.0.0.1", 1)]);
         let client = reqwest::Client::new();
         let sem = Arc::new(Semaphore::new(MAX_CONCURRENT));
-        let status = probe_service(&svc, &client, &sem, 500).await;
+        let status = probe_service(&svc, &client, &sem, 500, &BlockMemory::default()).await;
         assert_eq!(status.state, ServiceState::Down);
     }
 
@@ -484,7 +756,7 @@ mod tests {
         let svc = Service::with_endpoints("X", vec![Endpoint::new("127.0.0.1", 1)]);
         let client = reqwest::Client::new();
         let sem = Arc::new(Semaphore::new(MAX_CONCURRENT));
-        let status = probe_service(&svc, &client, &sem, 500).await;
+        let status = probe_service(&svc, &client, &sem, 500, &BlockMemory::default()).await;
 
         assert_eq!(status.id, svc.id);
         assert_eq!(status.endpoints.len(), 1, "one endpoint in, one status out");

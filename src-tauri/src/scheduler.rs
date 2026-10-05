@@ -106,7 +106,7 @@ async fn run_service_task(
     loop {
         // Read the live base interval + timeout under the lock, then DROP the guard before any
         // await (the config can mutate; we always pick up the latest). Honour the floor.
-        let (base, timeout_ms, client, sem) = {
+        let (base, timeout_ms, client, sem, memory) = {
             let state = app.state::<AppState>();
             let cfg = state.config.lock().unwrap();
             // Base interval is decided by this Service's parent list criticality.
@@ -121,11 +121,12 @@ async fn run_service_task(
                 cfg.critical_interval_secs,
                 cfg.noncritical_interval_secs,
             ));
-            (base, cfg.timeout_ms, state.probe_client.clone(), state.probe_sem.clone())
+            (base, cfg.timeout_ms, state.probe_client.clone(), state.probe_sem.clone(), state.block_memory.clone())
         };
 
         // Probe with NO lock held (network I/O).
-        let status = crate::probe::probe_service(&service, &client, &sem, timeout_ms).await;
+        let status =
+            crate::probe::probe_service(&service, &client, &sem, timeout_ms, &memory).await;
 
         // Update the streak from this probe's outcome.
         if status.fully_failing() {
@@ -145,7 +146,7 @@ async fn run_service_task(
         tokio::select! {
             _ = tokio::time::sleep(wait) => {}
             recv = signal_rx.recv() => {
-                // On a manual refresh, settle briefly so the UI's checking paint lands first.
+                // On a refresh, settle briefly so the UI's checking paint lands first.
                 if recv.is_ok() {
                     tokio::time::sleep(Duration::from_millis(50)).await;
                 }
@@ -173,6 +174,7 @@ fn apply_service_status(
     let mut guard = state.snapshot.lock().unwrap();
     let current = state.generation.load(Ordering::SeqCst);
     let delta = accept_result(guard.as_mut()?, current, generation, list_id, status)?;
+    crate::probe::note_cut_off(&state.was_cut_off, &state.block_memory, delta.cut_off);
     let _ = app.emit(EVENT_SERVICE, &delta);
     Some((delta.overall, delta.cut_off, delta.settled))
 }
@@ -190,6 +192,7 @@ pub fn checking_status(current: &ServiceStatus, endpoint_id: Option<&str>) -> Se
         if endpoint_id.is_none_or(|id| ep.id == id) {
             ep.state = ServiceState::Checking;
             ep.latency_ms = None;
+            ep.cause = None;
         }
     }
     s.state = worst_state(&s.endpoints.iter().map(|e| e.state).collect::<Vec<_>>());
@@ -281,6 +284,7 @@ fn apply_derived(
     let next = derive(&current);
     let live = state.generation.load(Ordering::SeqCst);
     let delta = accept_result(snap, live, generation, list_id, next)?;
+    crate::probe::note_cut_off(&state.was_cut_off, &state.block_memory, delta.cut_off);
     let _ = app.emit(EVENT_SERVICE, &delta);
     Some((delta.overall, delta.cut_off, delta.settled))
 }
@@ -321,12 +325,12 @@ pub fn check_now(
         return Err("That service has no status yet".into());
     }
 
-    let (client, sem) = (state.probe_client.clone(), state.probe_sem.clone());
+    let (client, sem, memory) = (state.probe_client.clone(), state.probe_sem.clone(), state.block_memory.clone());
     let (app, list_id, service_id) = (app.clone(), list_id.to_string(), service_id.to_string());
     let endpoint_only = endpoint_id.is_some();
     tauri::async_runtime::spawn(async move {
         // Probe with NO lock held (network I/O).
-        let fresh = crate::probe::probe_service(&service, &client, &sem, timeout_ms).await;
+        let fresh = crate::probe::probe_service(&service, &client, &sem, timeout_ms, &memory).await;
         let landed = if endpoint_only {
             match fresh.endpoints.first() {
                 Some(ep) => apply_derived(&app, &list_id, &service_id, generation, |cur| merge_endpoint(cur, ep)),
@@ -485,6 +489,16 @@ pub fn next_wan_delay(last_ok: bool) -> Duration {
     }
 }
 
+/// True when any enabled service has the (experimental) block check on.
+fn watches_blocks(cfg: &crate::models::Config) -> bool {
+    cfg.lists.iter().flat_map(|l| &l.services).any(|s| s.enabled && s.check_block)
+}
+
+/// True when the fresh lookup is a different IP from the last known one (or there was none).
+fn ip_changed(prev: Option<&crate::models::WanInfo>, fresh: &crate::models::WanInfo) -> bool {
+    prev.is_none_or(|p| p.ip != fresh.ip)
+}
+
 /// Spawn the single WAN task. Built once in `setup`.
 pub fn spawn_wan_task(app: &AppHandle) {
     let app = app.clone();
@@ -503,7 +517,19 @@ pub fn spawn_wan_task(app: &AppHandle) {
             let fetched = crate::wan::fetch_wan(&client, &providers).await;
             let last_ok = fetched.is_some();
             if let Some(info) = fetched {
-                *app.state::<AppState>().wan.lock().unwrap() = Some(info);
+                let state = app.state::<AppState>();
+                // Read the config before taking the WAN lock: never hold both.
+                let watching = watches_blocks(&state.config.lock().unwrap());
+                let mut wan = state.wan.lock().unwrap();
+                if ip_changed(wan.as_ref(), &info) {
+                    state.block_memory.clear();
+                    // Only when some service uses the block check: probe again at once rather than
+                    // wait for the timer, so a stale answer does not linger. Everyone else is untouched.
+                    if watching && wan.is_some() {
+                        let _ = state.probe_now.send(());
+                    }
+                }
+                *wan = Some(info);
             }
 
             // Put the fresh WAN into the stored snapshot and emit it (under the snapshot lock, so
@@ -609,6 +635,7 @@ mod tests {
                 host: "h".into(),
                 state,
                 latency_ms: None,
+                cause: None,
             }],
         }
     }
@@ -664,6 +691,7 @@ mod tests {
                 host: format!("h{i}"),
                 state: *s,
                 latency_ms: Some(10 + i as u64),
+                cause: None,
             })
             .collect();
         ServiceStatus {
@@ -672,6 +700,38 @@ mod tests {
             state: worst_state(states),
             endpoints,
         }
+    }
+
+    #[test]
+    fn the_extra_round_after_an_ip_change_is_only_for_block_check_users() {
+        let mut cfg = crate::models::Config::default();
+        assert!(!watches_blocks(&cfg), "defaults: nothing watches");
+        let list = cfg.lists.first_mut().expect("a default list");
+        let svc = list.services.first_mut().expect("a default service");
+        svc.check_block = true;
+        assert!(watches_blocks(&cfg));
+        cfg.lists[0].services[0].enabled = false;
+        assert!(!watches_blocks(&cfg), "a disabled service is not probed");
+    }
+
+    #[test]
+    fn only_a_different_ip_counts_as_a_change() {
+        let wan = |ip: &str| crate::models::WanInfo {
+            ip: ip.into(),
+            country_code: "US".into(),
+            country_name: "United States".into(),
+            flag_emoji: String::new(),
+        };
+        assert!(ip_changed(None, &wan("1.1.1.1")), "first lookup");
+        assert!(!ip_changed(Some(&wan("1.1.1.1")), &wan("1.1.1.1")), "same IP");
+        assert!(ip_changed(Some(&wan("1.1.1.1")), &wan("2.2.2.2")), "a new IP");
+    }
+
+    #[test]
+    fn checking_clears_a_block_cause() {
+        let mut g = svc("g", ServiceState::Blocked);
+        g.endpoints[0].cause = Some(crate::models::BlockCause::Cloudflare);
+        assert_eq!(checking_status(&g, None).endpoints[0].cause, None);
     }
 
     #[test]
@@ -703,7 +763,7 @@ mod tests {
         use ServiceState::*;
         // A group mid-check: e1 is being re-checked, the others are settled.
         let mid = checking_status(&group(&[Up, Down, Up]), Some("e1"));
-        let fresh = EndpointStatus { id: "e1".into(), host: "h1".into(), state: Up, latency_ms: Some(42) };
+        let fresh = EndpointStatus { id: "e1".into(), host: "h1".into(), state: Up, latency_ms: Some(42), cause: None };
 
         let merged = merge_endpoint(&mid, &fresh);
         assert_eq!(merged.endpoints[1].state, Up);
@@ -711,11 +771,11 @@ mod tests {
         assert_eq!(merged.state, Up, "all Up now");
 
         // …and when it is still Down, the group stays Down.
-        let still = EndpointStatus { id: "e1".into(), host: "h1".into(), state: Down, latency_ms: None };
+        let still = EndpointStatus { id: "e1".into(), host: "h1".into(), state: Down, latency_ms: None, cause: None };
         assert_eq!(merge_endpoint(&mid, &still).state, Down);
 
         // A result for an endpoint that is gone (edited meanwhile) changes nothing.
-        let gone = EndpointStatus { id: "zzz".into(), host: "x".into(), state: Down, latency_ms: None };
+        let gone = EndpointStatus { id: "zzz".into(), host: "x".into(), state: Down, latency_ms: None, cause: None };
         assert_eq!(shape(&merge_endpoint(&group(&[Up, Up, Up]), &gone)), shape(&group(&[Up, Up, Up])));
     }
 
@@ -736,7 +796,7 @@ mod tests {
         assert_eq!(marked.overall, Severity::Green);
         assert!(!marked.cut_off && !marked.list_all_down);
 
-        let fresh = EndpointStatus { id: "e1".into(), host: "h1".into(), state: Up, latency_ms: Some(30) };
+        let fresh = EndpointStatus { id: "e1".into(), host: "h1".into(), state: Up, latency_ms: Some(30), cause: None };
         let merged = merge_endpoint(&snap.lists[0].services[0].clone(), &fresh);
         let landed = recompute_delta(&mut snap, "l1", merged).unwrap();
         assert_eq!(landed.service.state, Up);

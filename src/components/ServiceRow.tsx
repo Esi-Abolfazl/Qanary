@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import type { EndpointStatus, ServiceState, ServiceStatus } from "../types";
+import type { BlockCause, EndpointStatus, ServiceState, ServiceStatus } from "../types";
 import { Icon } from "./Icon";
 import { useCollapsible } from "./useCollapsible";
 import { averageLatency, averageLatencyTitle } from "../utils/averageLatency";
@@ -13,6 +13,13 @@ function endpointNote(ep: EndpointStatus | undefined): string {
   if (ep.state === "up" && ep.latency_ms != null) return `${ep.latency_ms} ms`;
   return "";
 }
+
+/** The tooltip for a dot. A CDN's block page says more than the generic "Blocked". */
+const CDN_NAME: Record<BlockCause, string> = { cloudflare: "Cloudflare", akamai: "Akamai" };
+const stateTitle = (state: ServiceState, cause?: BlockCause) =>
+  state === "blocked" && cause
+    ? `Blocked by ${CDN_NAME[cause]} — the site answered but refused your IP (a VPN or proxy often causes this)`
+    : STATE_TITLE[state];
 
 const STATE_TITLE: Record<ServiceState, string> = {
   up: "Up — server answered over HTTPS",
@@ -49,10 +56,12 @@ function ServiceAvatar({
   label,
   host,
   state,
+  cause,
 }: {
   label: string;
   host: string;
   state: ServiceState;
+  cause?: BlockCause;
 }) {
   const [loaded, setLoaded] = useState(false);
   const [failed, setFailed] = useState(false);
@@ -60,7 +69,7 @@ function ServiceAvatar({
     <span
       className={`row-avatar${loaded ? " row-avatar-icon" : ""}`}
       data-state={state}
-      title={STATE_TITLE[state]}
+      title={stateTitle(state, cause)}
     >
       <span className="row-avatar-letter">{(label[0] ?? "?").toUpperCase()}</span>
       {host && !failed && (
@@ -186,6 +195,7 @@ export function ServiceRow({
           label={status.label}
           host={primaryEndpoint?.host ?? ""}
           state={status.state}
+          cause={status.endpoints.find((e) => e.state === "blocked")?.cause}
         />
       )}
 
@@ -302,7 +312,7 @@ export function ServiceRow({
                 const epLatency = endpointNote(ep);
                 return (
                   <li key={ep.id} className="endpoint-row">
-                    <i className="sd sd-big" data-state={ep.state} title={STATE_TITLE[ep.state]} />
+                    <i className="sd sd-big" data-state={ep.state} title={stateTitle(ep.state, ep.cause)} />
                     {canCheck ? (
                       <button
                         type="button"

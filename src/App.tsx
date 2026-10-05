@@ -497,6 +497,7 @@ function App() {
         modal.serviceId,
         draft.label,
         draft.endpoints,
+        draft.check_block ?? false,
       );
       setConfig(cfg);
     }

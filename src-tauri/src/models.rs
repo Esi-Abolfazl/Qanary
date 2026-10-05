@@ -47,6 +47,12 @@ pub struct Service {
     pub enabled: bool,
     #[serde(default)]
     pub endpoints: Vec<Endpoint>,
+    /// Opt-in, experimental: on a refresh the user asks for, read a CDN's block page after a 403, so
+    /// a site that refuses this IP (a VPN's, often) reads `Blocked`, not `Up` (ADR-0051). Off by
+    /// default; older configs load as off. Not written when off, so a config nobody opted in stays
+    /// byte-for-byte what it was.
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub check_block: bool,
 
     // Legacy fields — only present in old configs written before the multi-endpoint
     // model. Folded into `endpoints` by `store::migrate_legacy` on first load, then
@@ -75,6 +81,7 @@ impl Service {
             label: label.to_string(),
             enabled: true,
             endpoints: vec![Endpoint::new(host, 443)],
+            check_block: false,
             host: None,
             port: None,
         }
@@ -87,6 +94,7 @@ impl Service {
             label: label.to_string(),
             enabled: true,
             endpoints,
+            check_block: false,
             host: None,
             port: None,
         }
@@ -393,6 +401,18 @@ pub struct EndpointStatus {
     pub host: String,
     pub state: ServiceState,
     pub latency_ms: Option<u64>,
+    /// Why an endpoint reads `Blocked` when the server did answer: a CDN's block page.
+    /// Absent otherwise (older UI builds ignore it).
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cause: Option<BlockCause>,
+}
+
+/// A server that answered but refused us on purpose (usually the user's VPN/proxy IP).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BlockCause {
+    Cloudflare,
+    Akamai,
 }
 
 /// Per-service status for the UI.
@@ -467,4 +487,25 @@ pub struct ServiceDelta {
     /// Settledness of the whole Snapshot after this delta is merged — see `probe::is_settled`.
     /// Shipped per-delta for the same reason as `cut_off`: only the backend sees every Service.
     pub settled: bool,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A config written before the block check existed loads with it off, and a new service
+    /// starts with it off.
+    #[test]
+    fn check_block_defaults_to_off() {
+        let old = r#"{"id":"s","label":"X","endpoints":[]}"#;
+        let svc: Service = serde_json::from_str(old).unwrap();
+        assert!(!svc.check_block);
+        assert!(!Service::new("X", "x.com").check_block);
+        let written = serde_json::to_string(&Service::new("X", "x.com")).unwrap();
+        assert!(!written.contains("check_block"), "off is not written: {written}");
+        let on = r#"{"id":"s","label":"X","endpoints":[],"check_block":true}"#;
+        let svc = serde_json::from_str::<Service>(on).unwrap();
+        assert!(svc.check_block);
+        assert!(serde_json::to_string(&svc).unwrap().contains("\"check_block\":true"), "on is written");
+    }
 }

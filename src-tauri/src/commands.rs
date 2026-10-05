@@ -26,6 +26,9 @@ pub struct EndpointDraft {
 pub struct ServiceDraft {
     pub label: String,
     pub endpoints: Vec<EndpointDraft>,
+    /// Opt in to the experimental CDN block check for this service (ADR-0051).
+    #[serde(default)]
+    pub check_block: bool,
 }
 
 #[tauri::command]
@@ -43,7 +46,18 @@ pub fn get_config(state: State<AppState>) -> Config {
 /// arrive as events, so nothing is returned.
 #[tauri::command]
 pub fn refresh_now(app: AppHandle) {
-    crate::emit_checking(&app);
+    probe_all(&app);
+}
+
+/// The same round for the network watcher. The network changed (a VPN on or off, a new Wi-Fi), so
+/// the IP may differ: forget what was read about block pages, and the round reads them again.
+pub fn refresh_in_background(app: &AppHandle) {
+    app.state::<AppState>().block_memory.clear();
+    probe_all(app);
+}
+
+fn probe_all(app: &AppHandle) {
+    crate::emit_checking(app);
     let _ = app.state::<AppState>().probe_now.send(()); // Err just means no subscribers yet — harmless
 }
 
@@ -78,7 +92,9 @@ pub fn add_services(
     mutate(&app, |cfg| {
         let list = find_list(cfg, &list_id)?;
         for draft in &services {
-            list.services.push(Service::with_endpoints(&draft.label, to_endpoints(&draft.endpoints)?));
+            let mut service = Service::with_endpoints(&draft.label, to_endpoints(&draft.endpoints)?);
+            service.check_block = draft.check_block;
+            list.services.push(service);
         }
         Ok(())
     })
@@ -107,7 +123,7 @@ fn find_list<'a>(cfg: &'a mut Config, list_id: &str) -> Result<&'a mut ServiceLi
         .ok_or_else(|| "That list no longer exists.".to_string())
 }
 
-/// Replace a service's label and endpoints (wholesale edit).
+/// Replace a service's label, endpoints and block-check option (wholesale edit).
 #[tauri::command]
 pub fn update_service(
     app: AppHandle,
@@ -115,6 +131,7 @@ pub fn update_service(
     service_id: String,
     label: String,
     endpoints: Vec<EndpointDraft>,
+    check_block: bool,
 ) -> Result<Config, String> {
     mutate(&app, |cfg| {
         let svc = find_list(cfg, &list_id)?
@@ -124,6 +141,7 @@ pub fn update_service(
             .ok_or("That service no longer exists.")?;
         svc.label = label;
         svc.endpoints = to_endpoints(&endpoints)?;
+        svc.check_block = check_block;
         Ok(())
     })
 }

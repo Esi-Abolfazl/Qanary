@@ -24,7 +24,7 @@
 //! A **debounce loop** waits for the first `()` from either watcher, sleeps 500 ms while draining
 //! any extras (VPN bring-up fires several route changes at once), then calls `trigger` exactly once.
 //!
-//! `trigger` runs the manual refresh itself (`commands::refresh_now`): every service shows
+//! `trigger` runs the refresh itself (`commands::refresh_in_background`): every service shows
 //! Checking at once, and every Service probe task and the WAN task wake together.
 //!
 //! Watcher errors are logged and cause that layer to exit; the interval timer and the other layer
@@ -59,10 +59,11 @@ pub fn spawn_netwatch_task(app: &AppHandle) {
 
 // ── Trigger ──────────────────────────────────────────────────────────────────
 
-/// Fire one probe round: the same refresh as the orb, the tray and the app menu.
+/// Fire one probe round: the same refresh as the orb, the tray and the app menu, after forgetting
+/// what was read about CDN block pages (the IP may have changed).
 fn trigger(app: &AppHandle) {
     eprintln!("netwatch: probe triggered"); // observable signal for §5 manual smoke tests
-    crate::commands::refresh_now(app.clone());
+    crate::commands::refresh_in_background(app);
 }
 
 // ── Debounce loop ─────────────────────────────────────────────────────────────

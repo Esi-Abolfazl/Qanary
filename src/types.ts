@@ -11,7 +11,12 @@ export interface EndpointStatus {
   host: string;
   state: ServiceState;
   latency_ms: number | null;
+  /** Why it reads "blocked" though the server answered: a CDN's block page (ADR-0051). */
+  cause?: BlockCause;
 }
+
+/** A server that answered but refused us on purpose (usually the user's VPN/proxy IP). */
+export type BlockCause = "cloudflare" | "akamai";
 
 export interface ServiceStatus {
   id: string;
@@ -79,6 +84,8 @@ export interface Service {
   label: string;
   enabled: boolean;
   endpoints: Endpoint[];
+  /** Experimental, opt-in: tell a CDN's "you are blocked" page from the real site (ADR-0051). Absent = off. */
+  check_block?: boolean;
 }
 
 export interface ServiceList {
@@ -132,4 +139,5 @@ export interface EndpointDraft {
 export interface ServiceDraft {
   label: string;
   endpoints: EndpointDraft[];
+  check_block?: boolean;
 }
