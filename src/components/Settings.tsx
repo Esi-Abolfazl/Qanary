@@ -5,7 +5,7 @@ import {
   save as saveDialog,
   open as openDialog,
 } from "@tauri-apps/plugin-dialog";
-import type { Config, StatusIcon } from "../types";
+import type { Config, StatusIcon, TrayShape } from "../types";
 import { parseHost } from "../utils/parseHost";
 import type { UpdatePhase } from "../App";
 import { exportConfig, type SettingsPatch } from "../api";
@@ -27,8 +27,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { Icon } from "./Icon";
 import { useTheme, type ThemeMode } from "../theme";
-import { TrayIcon } from "./trayIcons";
-import { OrbThumb, ORB_STYLE_LABEL } from "./orbIcons";
+import { StatusIconPicker } from "./StatusIconPicker";
 
 const THEME_ICON: Record<ThemeMode, "sun" | "moon" | "monitor"> = {
   light: "sun",
@@ -177,6 +176,7 @@ export function Settings({
   const [hideDock, setHideDockState] = useState(false);
   const [statusIcon, setStatusIcon] = useState<StatusIcon>("pulse");
   const [trayFilled, setTrayFilled] = useState(true);
+  const [trayShape, setTrayShape] = useState<TrayShape>("same");
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [configMsg, setConfigMsg] = useState<{
@@ -188,7 +188,6 @@ export function Settings({
   const isMac = navigator.userAgent.includes("Mac");
   // Theme + "Reset to defaults" used to live in the hero menu; they moved here unchanged.
   const [theme, cycleTheme] = useTheme();
-  const uid = useId();
   const [confirmReset, setConfirmReset] = useState(false);
   const [resetBusy, setResetBusy] = useState(false);
 
@@ -215,6 +214,7 @@ export function Settings({
     setHideDockState(config.hide_dock);
     setStatusIcon(config.status_icon);
     setTrayFilled(config.tray_filled);
+    setTrayShape(config.tray_shape);
     setSaveError(null);
     setLoginError(null);
     setConfirmReset(false);
@@ -284,6 +284,7 @@ export function Settings({
         hide_dock: hideDock,
         status_icon: statusIcon,
         tray_filled: trayFilled,
+        tray_shape: trayShape,
       });
       onClose();
     } catch (err) {
@@ -331,44 +332,16 @@ export function Settings({
               <Icon name={THEME_ICON[theme]} size={14} />
               <span>Theme: {THEME_LABEL[theme]}</span>
             </button>
-            <div className="icon-pick">
-              <div className="icon-pick-row">
-                <span className="icon-pick-label" id={`${uid}-icon`}>Status icon</span>
-                <div className="seg" role="radiogroup" aria-labelledby={`${uid}-icon`}>
-                  {(["rings", "pulse"] as StatusIcon[]).map((icon) => (
-                    <button
-                      key={icon}
-                      type="button"
-                      role="radio"
-                      aria-checked={statusIcon === icon}
-                      className="seg-opt"
-                      onClick={() => setStatusIcon(icon)}
-                    >
-                      <OrbThumb style={icon} />
-                      <span>{ORB_STYLE_LABEL[icon]}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-              <div className="icon-pick-row">
-                <span className="icon-pick-label" id={`${uid}-tray`}>Menu bar</span>
-                <div className="seg" role="radiogroup" aria-labelledby={`${uid}-tray`}>
-                  {[false, true].map((filled) => (
-                    <button
-                      key={String(filled)}
-                      type="button"
-                      role="radio"
-                      aria-checked={trayFilled === filled}
-                      className="seg-opt"
-                      onClick={() => setTrayFilled(filled)}
-                    >
-                      <TrayIcon icon={statusIcon} filled={filled} mood="ok" size={16} />
-                      <span>{filled ? "Filled" : "Outline"}</span>
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
+            <StatusIconPicker
+              statusIcon={statusIcon}
+              onStatusIcon={setStatusIcon}
+              trayShape={trayShape}
+              trayFilled={trayFilled}
+              onTray={(shape, filled) => {
+                setTrayShape(shape);
+                setTrayFilled(filled);
+              }}
+            />
           </SettingsCard>
 
           {/* Config export/import — standalone, NOT governed by the form's Save button. */}

@@ -105,6 +105,7 @@ function StatusOrb({
       <button
         ref={orbRef}
         className={`status-orb${busy ? " status-orb-busy" : ""}`}
+        data-icon={icon}
         onClick={onClick}
         // Offline means this machine has no network: a refresh can't fix that, and the scheduled
         // checks pick the connection up again on their own.

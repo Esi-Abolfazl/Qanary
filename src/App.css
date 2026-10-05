@@ -13,28 +13,28 @@
   );
   --card-border: light-dark(rgba(255, 255, 255, 0.95), rgba(255, 255, 255, 0.085));
   --card-shadow:
-    inset 0 1px 0 light-dark(#fff, rgba(255, 255, 255, 0.07)),
+    inset 0 1px 0 var(--hl),
     0 1px 0 light-dark(rgba(30, 28, 60, 0.05), rgba(0, 0, 0, 0.35)),
     0 12px 28px -14px light-dark(rgba(30, 28, 60, 0.2), rgba(0, 0, 0, 0.7));
   /* Buttons and chips: a soft 3D gradient. */
   --btn-bg: linear-gradient(
     180deg,
-    light-dark(#fff, rgba(255, 255, 255, 0.12)),
+    var(--hl-strong),
     light-dark(rgba(255, 255, 255, 0.78), rgba(255, 255, 255, 0.05))
   );
-  --btn-border: light-dark(rgba(30, 28, 60, 0.1), rgba(255, 255, 255, 0.085));
+  --btn-border: var(--fill-3);
   --btn-shadow:
-    inset 0 1px 0 light-dark(#fff, rgba(255, 255, 255, 0.07)),
+    inset 0 1px 0 var(--hl),
     0 2px 8px -4px light-dark(rgba(30, 28, 60, 0.15), rgba(0, 0, 0, 0.5));
   /* Primary (canary yellow) and destructive (red) buttons: the same gradient, lit top edge and glow. */
   --brand-btn-bg: linear-gradient(180deg, color-mix(in srgb, var(--brand) 78%, #fff), var(--brand));
   --brand-btn-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.4),
-    0 2px 12px -2px color-mix(in srgb, var(--brand) 55%, transparent);
+    0 2px 12px -2px color-mix(in srgb, var(--brand) var(--glow), transparent);
   --danger-btn-bg: linear-gradient(180deg, #ff6a62, #e5443c);
   --danger-btn-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.28),
-    0 2px 10px -2px color-mix(in srgb, var(--state-down) 55%, transparent);
+    0 2px 10px -2px color-mix(in srgb, var(--state-down) var(--glow), transparent);
   --noise: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1  0 0 0 0 1  0 0 0 0 1  0 0 0 1.1 -.42'/></filter><rect width='100%' height='100%' filter='url(%23n)' opacity='.11'/></svg>");
   --bg: var(--bg-base);
   --panel: var(--bg-layer);
@@ -187,38 +187,38 @@ body {
   z-index: 1; /* above the drawer, which grows out from under it */
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: var(--hero-btn);
+  height: var(--hero-btn);
   padding: 0;
-  border-radius: 50%;
+  border-radius: var(--r-control);
   border: 1px solid var(--btn-border);
   background: var(--btn-bg);
   box-shadow: var(--btn-shadow);
   color: var(--text-muted);
   cursor: pointer;
+  isolation: isolate; /* the open ☰'s hover fill sits behind its icon */
   transition:
     background 0.2s,
     border-color 0.2s,
     box-shadow 0.2s,
     color 0.2s,
+    filter 0.2s,
     transform 0.2s;
 }
 .hero-btn:hover {
-  background: var(--glass-strong);
+  filter: brightness(1.15); /* the same surface, lit: it never swaps to another background */
   color: var(--text-strong);
 }
 .hero-btn:active {
   transform: scale(0.92);
 }
-/* Centre the ☰ over the lists' right-hand icon column (the header chevron and each row's ⋮):
-   list inset + card border + header padding + half a 28px button, less the hero's own side
-   padding and half the ☰. */
+/* The ☰'s right edge is the cards' right edge, as the logo, the headline, the IP chip and the cards
+   share one left edge: the hero's boxes sit on two lines, left and right. */
 .hero-menu {
   position: relative;
   z-index: 5; /* the tips hang over the headline */
-  margin-right: calc(var(--sp-3) + 1px + 10px + 14px - 12px - 17px);
 }
-/* Open, the ☰ drops its own circle and becomes the drawer's end cap, muted like the actions
+/* Open, the ☰ drops its own square and becomes the drawer's end cap, muted like the actions
    beside it and full strength only under the pointer. */
 .hero-menu-open .hero-menu-btn {
   border-color: transparent;
@@ -226,8 +226,24 @@ body {
   box-shadow: none;
 }
 .hero-menu-open .hero-menu-btn:hover {
-  background: var(--glass-strong);
+  filter: none;
   color: var(--text-strong);
+}
+/* Every cell in the capsule (the ☰ and the actions) is one 32px box with the same fill inset by 2px:
+   1px of the capsule's border plus 1px of air on every side. */
+.hero-menu-btn::before,
+.hero-drawer-btn::before {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  z-index: -1;
+  border-radius: var(--r-control-sm);
+  background: transparent;
+  transition: background 0.2s;
+}
+.hero-menu-open .hero-menu-btn:hover::before,
+.hero-drawer-btn:hover:not(:disabled)::before {
+  background: var(--fill-2);
 }
 /* ☰ → ›, pointing the way the drawer closes. Each outer bar turns about its own centre onto a
    chevron arm (Lucide's chevron-right, m9 18 6-6-6-6: two 8.49-long arms meeting at 15,12), and
@@ -264,18 +280,18 @@ body {
   transform: translateY(-2px) rotate(-45deg) scaleX(0.606);
 }
 
-/* The drawer: a glass capsule 3px around the ☰ that stretches out to the left. The actions sit
-   right to left so the nearest comes first, in Tab order and in the entrance. */
+/* The drawer: the ☰'s own rounded square stretched out to the left, as tall as the ☰, with the ☰
+   as its end cell. The actions sit right to left so the nearest comes first, in Tab order and in
+   the entrance. Every cell is the same 32px box, so the gaps are the same on every side. */
 .hero-drawer {
   position: absolute;
-  top: -3px;
-  right: -3px;
-  height: 40px;
+  top: 0;
+  right: 0;
+  height: var(--hero-btn);
   display: flex;
   flex-direction: row-reverse;
   align-items: center;
-  gap: 4px;
-  padding: 3px calc(3px + 34px + 4px) 3px 3px;
+  padding: 0 var(--hero-btn) 0 0;
 }
 .hero-drawer::before {
   content: "";
@@ -284,8 +300,9 @@ body {
   right: 0;
   bottom: 0;
   width: 100%;
+  box-sizing: border-box; /* the border is inside the width, so both ends are the same distance away */
   z-index: -1;
-  border-radius: 20px;
+  border-radius: var(--r-control);
   border: 1px solid var(--btn-border);
   background: var(--btn-bg);
   box-shadow: var(--btn-shadow);
@@ -306,16 +323,16 @@ body {
 }
 @keyframes hero-drawer-grow {
   from {
-    width: 40px;
+    width: var(--hero-btn);
   }
 }
-/* It ends 3px around the ☰'s own circle; the last frames fade that ring out. */
+/* It ends on the ☰'s own shape; the last frames fade that ring out. */
 @keyframes hero-drawer-shrink {
   85% {
     opacity: 1;
   }
   to {
-    width: 40px;
+    width: var(--hero-btn);
     opacity: 0;
   }
 }
@@ -324,16 +341,16 @@ body {
   position: relative;
   display: grid;
   place-items: center;
-  width: 34px;
-  height: 34px;
+  width: var(--hero-btn);
+  height: var(--hero-btn);
   padding: 0;
   border: 0;
-  border-radius: 50%;
+  border-radius: var(--r-control);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
+  isolation: isolate;
   transition:
-    background 0.2s,
     color 0.2s,
     transform 0.2s;
 }
@@ -349,21 +366,20 @@ body {
     transform: translateX(14px) scale(0.4) rotate(-45deg);
   }
 }
-/* Each action travels to the ☰: one 34px button plus the 4px gap per step. */
+/* Each action travels to the ☰: one cell per step. */
 @keyframes hero-item-out {
   40% {
     opacity: 1;
   }
   to {
     opacity: 0;
-    transform: translateX(calc((var(--i) + 1) * 38px)) scale(0.4) rotate(45deg);
+    transform: translateX(calc((var(--i) + 1) * var(--hero-btn))) scale(0.4) rotate(45deg);
   }
 }
 .hero-drawer-btn svg {
   transition: transform 0.5s cubic-bezier(0.3, 1.3, 0.5, 1);
 }
 .hero-drawer-btn:hover:not(:disabled) {
-  background: var(--glass-strong);
   color: var(--text-strong);
 }
 .hero-drawer-btn:active:not(:disabled) {
@@ -380,8 +396,10 @@ body {
   transform: scaleY(-1);
 }
 .hero-drawer-btn[aria-pressed="true"] {
-  background: color-mix(in srgb, var(--brand) 24%, transparent);
   color: var(--text-strong);
+}
+.hero-drawer-btn[aria-pressed="true"]::before {
+  background: color-mix(in srgb, var(--brand) var(--tint-3), transparent);
 }
 .hero-drawer-btn:disabled {
   opacity: 0.4;
@@ -447,7 +465,7 @@ body {
 .hero-drawer-btn:focus-visible,
 .update-btn:focus-visible {
   outline: 0;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 55%, transparent);
+  box-shadow: var(--focus-ring);
 }
 
 /* Headline, subtitle and the IP row stack on the left; the orb is centred on that block. */
@@ -456,7 +474,9 @@ body {
   grid-template-columns: 1fr auto;
   align-items: center;
   column-gap: 16px;
-  padding: 8px 14px 0 0;
+  /* The orb's halo ends where the cards' icon column ends (the header chevron, each row's ⋮); the text
+     sits a little in from the cards' left edge, to balance it. */
+  padding: 8px calc(var(--orb-halo) + var(--card-inset)) 0 var(--hero-text-inset);
 }
 .hero-copy {
   min-width: 0;
@@ -530,14 +550,14 @@ body {
       0%,
     light-dark(
         color-mix(in srgb, var(--sev) 20%, transparent),
-        color-mix(in srgb, var(--sev) 10%, transparent)
+        color-mix(in srgb, var(--sev) var(--tint-1), transparent)
       )
       50%,
     transparent 100%
   );
 }
 .status-orb {
-  --rs: 1.4; /* how far the ripple rings travel */
+  --rg: 17px; /* how far the ripple rings travel past the orb */
   position: relative;
   display: grid;
   place-items: center;
@@ -562,7 +582,7 @@ body {
     inset 0 1px 1px rgba(255, 255, 255, 0.35),
     inset 0 -5px 10px color-mix(in srgb, var(--sev) 75%, #000 25%),
     /* Same halo and glow in light and dark, so the orb's colour doesn't change with the theme. */
-    0 0 0 6px color-mix(in srgb, var(--sev) 16%, transparent),
+    0 0 0 var(--orb-halo) color-mix(in srgb, var(--sev) var(--tint-2), transparent),
     0 6px 34px color-mix(in srgb, var(--sev) 50%, transparent);
 }
 .status-orb::before,
@@ -570,10 +590,21 @@ body {
   content: "";
   position: absolute;
   inset: 0;
-  border-radius: 50%;
-  border: 2px solid var(--sev);
+  border-radius: inherit; /* a ripple is the orb's own shape ... */
+  /* ... drawn as an outline that moves out: the browser draws an outline around a rounded box with the
+     corner radius grown by the same offset (concentric with the orb and its halo) and renders it
+     smoothly, which a border whose radius changes every frame does not. */
+  outline: 2px solid var(--sev);
+  outline-offset: 0;
   opacity: 0;
   pointer-events: none;
+}
+/* Pulse is a rounded square, like its menu-bar icon and the app's controls; Rings stays a circle.
+   A percentage radius scales to the big orb, the "?" popover's minis and the Settings thumbs. */
+.status-orb[data-icon="pulse"],
+.orb-mini[data-icon="pulse"],
+.orb-thumb[data-icon="pulse"] {
+  border-radius: var(--r-orb-pulse);
 }
 .status-orb:active:not(:disabled) {
   transform: scale(0.96);
@@ -606,6 +637,7 @@ body {
 /* A touch see-through, so the orb's color shows through like the rings' softer outer rings. */
 .orb-refresh-icon {
   opacity: 0.85;
+  stroke-width: 2.2; /* bolder than the status icons */
 }
 .orb-icon {
   transition:
@@ -675,22 +707,70 @@ body {
 .orb-icon-rings[data-mood="alarm"] .rg:nth-child(3) {
   animation-delay: 0.14s, 1.06s;
 }
-/* Offline (Wi-Fi off, every style): the arcs slowly sink back, and the slash fades a little in and out. */
-.orb-icon[data-mood="offline"] .rg {
-  animation:
-    orb-rg 0.55s cubic-bezier(0.3, 1.4, 0.5, 1) both,
-    orb-sink 4s ease-in-out 0.9s infinite;
+/* Offline (Wi-Fi off, every style): the three arcs switch on one after another, hold, then all go dark.
+ * The "!" and its dot stay still. The path rules above (draw-in, dashes) don't apply here. */
+.orb-icon.off-wifi path {
+  stroke-dasharray: none;
+  animation: none;
 }
-.orb-icon[data-mood="offline"] .rg:nth-child(2) {
-  animation-delay: 0.07s, 1.15s;
+.orb-icon.off-wifi .sq1 {
+  animation: orb-seq1 3s ease-in-out infinite;
 }
-.orb-icon[data-mood="offline"] .rg:nth-child(3) {
-  animation-delay: 0.14s, 1.4s;
+.orb-icon.off-wifi .sq2 {
+  animation: orb-seq2 3s ease-in-out infinite;
 }
-.orb-icon[data-mood="offline"] .orb-slash {
-  animation:
-    orb-draw 0.45s cubic-bezier(0.6, 0, 0.2, 1) 0.18s both,
-    orb-blink 4s ease-in-out 0.9s infinite;
+.orb-icon.off-wifi .sq3 {
+  animation: orb-seq3 3s ease-in-out infinite;
+}
+@keyframes orb-seq1 {
+  0%,
+  6% {
+    opacity: 0.16;
+  }
+  14%,
+  80% {
+    opacity: 1;
+  }
+  90%,
+  100% {
+    opacity: 0.16;
+  }
+}
+@keyframes orb-seq2 {
+  0%,
+  24% {
+    opacity: 0.16;
+  }
+  32%,
+  80% {
+    opacity: 1;
+  }
+  90%,
+  100% {
+    opacity: 0.16;
+  }
+}
+@keyframes orb-seq3 {
+  0%,
+  42% {
+    opacity: 0.16;
+  }
+  50%,
+  80% {
+    opacity: 1;
+  }
+  90%,
+  100% {
+    opacity: 0.16;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .orb-icon.off-wifi .sq1,
+  .orb-icon.off-wifi .sq2,
+  .orb-icon.off-wifi .sq3 {
+    animation: none;
+    opacity: 1;
+  }
 }
 @keyframes orb-turn {
   to {
@@ -722,15 +802,6 @@ body {
   }
   52% {
     transform: scale(0.96);
-  }
-}
-@keyframes orb-sink {
-  0%,
-  100% {
-    transform: scale(1);
-  }
-  50% {
-    transform: scale(0.86);
   }
 }
 @keyframes orb-breathe {
@@ -968,14 +1039,14 @@ body {
 @keyframes orb-ripple {
   0% {
     opacity: 0;
-    transform: scale(0.98);
+    outline-offset: 0;
   }
   18% {
     opacity: 0.65;
   }
   100% {
     opacity: 0;
-    transform: scale(var(--rs));
+    outline-offset: var(--rg);
   }
 }
 
@@ -1018,6 +1089,24 @@ body {
     filter: none;
   }
 }
+/* The square must not tilt: the same shake without the rotation. */
+@keyframes orb-shake-flat {
+  15% {
+    transform: translateX(-7px);
+  }
+  35% {
+    transform: translateX(6px);
+  }
+  55% {
+    transform: translateX(-4px);
+  }
+  75% {
+    transform: translateX(3px);
+  }
+  100% {
+    transform: none;
+  }
+}
 @keyframes orb-shake {
   15% {
     transform: translateX(-7px) rotate(-3deg);
@@ -1034,6 +1123,11 @@ body {
   100% {
     transform: none;
   }
+}
+.status-orb[data-icon="pulse"].orb-pop.orb-flash.orb-shake {
+  animation:
+    orb-shake-flat 0.6s ease-in-out,
+    orb-flash 0.7s ease-out;
 }
 @media (prefers-reduced-motion: reduce) {
   .status-orb,
@@ -1052,34 +1146,24 @@ body {
 .wan {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  height: 32px;
-  padding: 0 9px 0 4px;
-  border-radius: 11px;
+  gap: 7px;
+  height: var(--h-control);
+  padding: 0 11px;
+  border-radius: var(--r-control);
   font-size: var(--text-xs);
   color: var(--text-strong);
-  background: linear-gradient(
-    180deg,
-    light-dark(rgba(255, 255, 255, 0.8), rgba(255, 255, 255, 0.075)),
-    light-dark(rgba(255, 255, 255, 0.45), rgba(255, 255, 255, 0.025))
-  );
-  border: 1px solid light-dark(rgba(30, 28, 60, 0.12), rgba(255, 255, 255, 0.085));
-  box-shadow:
-    inset 0 1px 0 light-dark(#fff, rgba(255, 255, 255, 0.07)),
-    0 2px 10px -4px light-dark(rgba(30, 28, 60, 0.2), rgba(0, 0, 0, 0.5));
+  /* The same surface as every button and chip. */
+  background: var(--btn-bg);
+  border: 1px solid var(--btn-border);
+  box-shadow: var(--btn-shadow);
 }
 .flag {
-  display: grid;
-  place-items: center;
-  width: 24px;
-  height: 24px;
-  border-radius: 8px;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1;
-  background: light-dark(rgba(30, 28, 60, 0.06), linear-gradient(180deg, rgba(255, 255, 255, 0.12), rgba(255, 255, 255, 0.05)));
-  box-shadow: inset 0 0 0 1px light-dark(rgba(30, 28, 60, 0.06), rgba(255, 255, 255, 0.07));
 }
 .wan-cc {
+  position: relative;
+  top: -0.27px; /* optical centring: the font's line box sits the caps a hair low in the chip */
   font-weight: 700;
   font-size: var(--text-xs);
   letter-spacing: 0.6px;
@@ -1098,6 +1182,8 @@ body {
   );
 }
 .wan-ip {
+  position: relative;
+  top: 0.3px; /* and the mono digits a hair high */
   font-family: var(--font-mono);
   font-weight: 500;
   font-size: 12.5px;
@@ -1111,10 +1197,10 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  height: 32px;
+  height: var(--h-control);
   padding: 0 13px 0 10px;
   border: 0;
-  border-radius: 11px;
+  border-radius: var(--r-control);
   font: inherit;
   font-size: 12.5px;
   font-weight: 700;
@@ -1156,7 +1242,7 @@ body {
   position: absolute;
   inset: 0 auto 0 0;
   width: var(--pct, 0%);
-  background: color-mix(in srgb, var(--brand) 40%, transparent);
+  background: color-mix(in srgb, var(--brand) var(--ring), transparent);
   transition: width 0.12s linear;
 }
 .update-btn[data-phase="ready"] {
@@ -1164,7 +1250,7 @@ body {
   color: #06301e;
   box-shadow:
     inset 0 1px 0 rgba(255, 255, 255, 0.35),
-    0 2px 12px -2px color-mix(in srgb, var(--state-up) 55%, transparent);
+    0 2px 12px -2px color-mix(in srgb, var(--state-up) var(--glow), transparent);
   animation: update-land 0.55s cubic-bezier(0.3, 1.4, 0.5, 1);
 }
 /* Ready: breathing ring + beating icon, the same "look at me" motion as a Critical list. */
@@ -1175,8 +1261,8 @@ body {
   border-radius: 14px; /* button radius + inset keeps the ring concentric */
   pointer-events: none;
   box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--state-up) 55%, transparent),
-    0 0 14px 2px color-mix(in srgb, var(--state-up) 55%, transparent);
+    0 0 0 2px color-mix(in srgb, var(--state-up) var(--glow), transparent),
+    0 0 14px 2px color-mix(in srgb, var(--state-up) var(--glow), transparent);
   animation: pulse-ring 1.5s ease-in-out infinite;
 }
 .update-btn[data-phase="ready"] svg {
@@ -1296,7 +1382,7 @@ body {
   position: relative;
   background: var(--card-bg);
   border: 1px solid var(--card-border);
-  border-radius: 18px;
+  border-radius: var(--r-card);
   box-shadow: var(--card-shadow);
   overflow: visible;
   /* The header's narrow layout follows the card's width, not the window's (cards share a row). */
@@ -1311,7 +1397,7 @@ body {
   display: flex;
   align-items: center;
   gap: 6px;
-  padding: 8px 10px;
+  padding: 10px; /* + the 1px border = 11px on the top and sides, like the ⋯ and chevron buttons */
 }
 
 /* Name chip: a gray frame; a fully down list tints it (ADR-0040). */
@@ -1320,22 +1406,16 @@ body {
   flex: 0 1 auto;
   align-items: center;
   box-sizing: border-box;
-  height: 30px; /* fixed: an emoji (or none) must not change the row height */
+  height: var(--h-control); /* fixed: an emoji (or none) must not change the row height */
   gap: 7px;
   min-width: 0;
   max-width: clamp(120px, 52%, 240px);
   margin-right: auto;
-  padding: 0 13px 0 10px;
-  border-radius: 12px;
-  background: linear-gradient(
-    180deg,
-    light-dark(#fff, rgba(255, 255, 255, 0.1)),
-    light-dark(rgba(255, 255, 255, 0.66), rgba(255, 255, 255, 0.04))
-  );
-  box-shadow:
-    inset 0 0 0 1px light-dark(rgba(30, 28, 60, 0.15), rgba(255, 255, 255, 0.15)),
-    inset 0 1px 0 light-dark(transparent, rgba(255, 255, 255, 0.1)),
-    0 2px 6px -2px light-dark(rgba(30, 28, 60, 0.12), rgba(0, 0, 0, 0.45));
+  padding: 0 12px 0 9px; /* the 1px border takes the other pixel */
+  border: 1px solid var(--btn-border);
+  border-radius: var(--r-control);
+  background: var(--btn-bg);
+  box-shadow: var(--btn-shadow);
   transition: background 0.2s;
 }
 .list-name-check {
@@ -1367,13 +1447,13 @@ body {
 }
 .list-name-btn:focus-visible {
   outline: 0;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 60%, transparent);
+  box-shadow: var(--focus-ring-sm);
 }
 .list-name:hover {
   background: linear-gradient(
     180deg,
-    light-dark(#fff, rgba(255, 255, 255, 0.14)),
-    light-dark(#fff, rgba(255, 255, 255, 0.07))
+    var(--hl-strong),
+    var(--hl)
   );
 }
 .list-name-icon {
@@ -1408,7 +1488,7 @@ body {
   color: var(--state-up);
 }
 .list-name-crit svg {
-  fill: color-mix(in srgb, currentColor 22%, transparent);
+  fill: color-mix(in srgb, currentColor var(--tint-3), transparent);
 }
 
 /* Any list fully down: the chip takes a soft red tint and a thin ring that breathes slowly — low
@@ -1418,11 +1498,11 @@ body {
   color: var(--down-ink);
   background: linear-gradient(
     180deg,
-    light-dark(rgba(255, 255, 255, 0.85), color-mix(in srgb, var(--state-down) 18%, transparent)),
-    light-dark(color-mix(in srgb, var(--state-down) 10%, rgba(255, 255, 255, 0.7)), color-mix(in srgb, var(--state-down) 9%, transparent))
+    light-dark(rgba(255, 255, 255, 0.85), color-mix(in srgb, var(--state-down) var(--tint-2), transparent)),
+    light-dark(color-mix(in srgb, var(--state-down) 10%, rgba(255, 255, 255, 0.7)), color-mix(in srgb, var(--state-down) var(--tint-1), transparent))
   );
   box-shadow:
-    inset 0 0 0 1px color-mix(in srgb, var(--state-down) 40%, transparent),
+    inset 0 0 0 1px color-mix(in srgb, var(--state-down) var(--ring), transparent),
     inset 0 1px 0 light-dark(transparent, rgba(255, 255, 255, 0.06));
 }
 .list-name-down::after {
@@ -1431,7 +1511,7 @@ body {
   inset: -3px;
   border-radius: 15px; /* the chip's 12px + the 3px it sits out */
   pointer-events: none;
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--state-down) 40%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--state-down) var(--ring), transparent);
   animation: pulse-ring 3s ease-in-out infinite;
 }
 /* A Critical list fully down: the chip turns solid red and pulses, shield and all. */
@@ -1439,13 +1519,13 @@ body {
   color: #fff;
   background: linear-gradient(180deg, #ff6a62, #e5443c);
   box-shadow:
-    0 2px 10px color-mix(in srgb, var(--state-down) 55%, transparent),
+    0 2px 10px color-mix(in srgb, var(--state-down) var(--glow), transparent),
     inset 0 1px 0 rgba(255, 255, 255, 0.28);
 }
 .list-name-alarm::after {
   box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--state-down) 55%, transparent),
-    0 0 14px 2px color-mix(in srgb, var(--state-down) 55%, transparent);
+    0 0 0 2px color-mix(in srgb, var(--state-down) var(--glow), transparent),
+    0 0 14px 2px color-mix(in srgb, var(--state-down) var(--glow), transparent);
   animation-duration: 1.5s;
 }
 .list-name-alarm .list-name-crit {
@@ -1495,11 +1575,11 @@ body {
   display: grid;
   place-items: center;
   flex: none;
-  width: 28px;
-  height: 28px;
+  width: var(--h-control-sm);
+  height: var(--h-control-sm);
   padding: 0;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--r-control-sm);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
@@ -1518,7 +1598,7 @@ body {
 .list-menu-btn:focus-visible,
 .list-dropdown-item:focus-visible {
   outline: 0;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 55%, transparent);
+  box-shadow: var(--focus-ring);
 }
 /* Collapse chevron: one calm rotation, no spring. */
 .list-chevron-btn svg,
@@ -1540,13 +1620,10 @@ body {
   z-index: 100;
   min-width: 172px;
   padding: 5px;
-  border-radius: 14px;
-  /* A touch of gradient, still opaque. */
-  background: linear-gradient(180deg, light-dark(#faf9ff, #2c2c32), light-dark(#eceaf6, #1f1f24));
-  border: 1px solid light-dark(rgba(20, 18, 40, 0.08), rgba(255, 255, 255, 0.1));
-  box-shadow:
-    var(--elevation),
-    inset 0 1px 0 light-dark(#fff, rgba(255, 255, 255, 0.08));
+  border-radius: var(--r-menu);
+  background: var(--menu-bg);
+  border: 1px solid var(--menu-border);
+  box-shadow: var(--menu-shadow);
   transform-origin: top right;
   animation: dropdown-in 0.17s cubic-bezier(0.3, 1.3, 0.5, 1);
 }
@@ -1568,7 +1645,7 @@ body {
   width: 100%;
   padding: 9px 10px;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--r-control-sm);
   background: transparent;
   color: var(--text-strong);
   font: inherit;
@@ -1581,7 +1658,7 @@ body {
   transition: color 0.15s;
 }
 .list-dropdown-item:hover:not(:disabled) {
-  background: light-dark(rgba(20, 18, 40, 0.055), rgba(255, 255, 255, 0.075));
+  background: var(--fill-2);
 }
 .list-dropdown-item:hover:not(:disabled) svg {
   color: light-dark(#b58a00, var(--brand));
@@ -1606,13 +1683,13 @@ body {
   background: linear-gradient(
     90deg,
     transparent,
-    light-dark(rgba(20, 18, 40, 0.1), rgba(255, 255, 255, 0.1)) 15%,
-    light-dark(rgba(20, 18, 40, 0.1), rgba(255, 255, 255, 0.1)) 85%,
+    var(--fill-3) 15%,
+    var(--fill-3) 85%,
     transparent
   );
 }
 .list-dropdown-delete:hover:not(:disabled) {
-  background: color-mix(in srgb, var(--state-down) 18%, transparent);
+  background: color-mix(in srgb, var(--state-down) var(--tint-2), transparent);
 }
 
 /* Collapsible body: rows animate open/closed with a grid-rows tween (see useCollapsible). */
@@ -1703,8 +1780,8 @@ body {
   /* fades out to the right */
   background: linear-gradient(
     90deg,
-    color-mix(in srgb, var(--text-strong) 10%, transparent) 0%,
-    color-mix(in srgb, var(--text-strong) 9%, transparent) 70%,
+    color-mix(in srgb, var(--text-strong) var(--tint-1), transparent) 0%,
+    color-mix(in srgb, var(--text-strong) var(--tint-1), transparent) 70%,
     transparent 100%
   );
   transition: opacity 0.15s;
@@ -1719,7 +1796,7 @@ body {
 /* An open group reads as one panel: the row and its hosts share a faint backdrop. */
 .row-open {
   /* On the light card a white tint is invisible, so light uses a faint indigo tint and a hairline. */
-  background: light-dark(rgba(30, 28, 60, 0.055), rgba(255, 255, 255, 0.035));
+  background: var(--fill-1);
   box-shadow: inset 0 0 0 1px light-dark(rgba(30, 28, 60, 0.07), transparent);
   transition:
     background 0.15s,
@@ -1727,7 +1804,7 @@ body {
 }
 /* Hovering an open group must not swap its panel for the plain row hover and back: it only deepens. */
 .row-open:hover {
-  background: light-dark(rgba(30, 28, 60, 0.075), rgba(255, 255, 255, 0.055));
+  background: var(--fill-1);
 }
 
 /* Status colors: one place, reused by the avatar dot, the badge and the count dots. */
@@ -1756,21 +1833,25 @@ body {
 }
 
 .row-avatar {
+  /* The favicon sits inset on the tile; its corner radius is the tile's minus that inset, so the
+   * two corners are concentric and run parallel instead of the icon looking squarer. */
+  --avatar-r: 8px;
+  --avatar-inset: 3px;
   position: relative;
   display: grid;
   place-items: center;
   flex: none;
   width: 24px;
   height: 24px;
-  border-radius: 8px;
+  border-radius: var(--avatar-r);
   background: linear-gradient(
     180deg,
-    light-dark(#fff, rgba(255, 255, 255, 0.13)),
+    var(--hl-strong),
     light-dark(rgba(255, 255, 255, 0.5), rgba(255, 255, 255, 0.05))
   );
   color: light-dark(#2a2740, rgba(255, 255, 255, 0.86));
   box-shadow:
-    inset 0 0 0 1px light-dark(rgba(30, 28, 60, 0.12), rgba(255, 255, 255, 0.07)),
+    inset 0 0 0 1px var(--fill-2),
     inset 0 1px 0 light-dark(transparent, rgba(255, 255, 255, 0.09));
   font-size: 11px;
   font-weight: 600;
@@ -1797,10 +1878,10 @@ body {
 }
 .row-favicon {
   position: absolute;
-  inset: 3px;
+  inset: var(--avatar-inset);
   width: 18px;
   height: 18px;
-  border-radius: 4px;
+  border-radius: calc(var(--avatar-r) - var(--avatar-inset));
   opacity: 0;
   transition: opacity 0.2s;
 }
@@ -1854,7 +1935,7 @@ body {
 }
 .row-check:focus-visible {
   outline: 0;
-  box-shadow: 0 0 0 2px color-mix(in srgb, var(--brand) 60%, transparent);
+  box-shadow: var(--focus-ring-sm);
 }
 .row-host {
   flex: 0 3 auto;
@@ -1962,7 +2043,7 @@ body {
   border-radius: 50%;
   background: radial-gradient(circle at 35% 30%, color-mix(in srgb, var(--c) 55%, #fff) 0%, var(--c) 60%);
   box-shadow:
-    0 0 0 2px color-mix(in srgb, var(--c) 16%, transparent),
+    0 0 0 2px color-mix(in srgb, var(--c) var(--tint-2), transparent),
     0 0 8px light-dark(color-mix(in srgb, var(--c) 50%, transparent), color-mix(in srgb, var(--c) 70%, transparent));
 }
 .sd-big {
@@ -2010,7 +2091,7 @@ body {
   border-radius: 1px;
   background: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--text-strong) 18%, transparent),
+    color-mix(in srgb, var(--text-strong) var(--tint-2), transparent),
     color-mix(in srgb, var(--text-strong) 4%, transparent)
   );
 }
@@ -2054,12 +2135,12 @@ body {
   z-index: 300;
 }
 .modal {
-  /* Glass sheet: translucent, blurred, with a hairline stroke. */
-  background: light-dark(var(--glass-strong), rgba(30, 30, 36, 0.75));
+  /* The same surface as a list card, blurred over the page, with a dialog's corners. */
+  background: var(--card-bg);
   -webkit-backdrop-filter: var(--glass-blur);
   backdrop-filter: var(--glass-blur);
-  border: 1px solid var(--stroke);
-  border-radius: 24px;
+  border: 1px solid var(--card-border);
+  border-radius: var(--r-sheet);
   padding: 18px;
   min-width: 280px;
   max-width: 360px;
@@ -2068,7 +2149,7 @@ body {
   max-height: calc(100dvh - 48px);
   overflow-y: auto;
   box-shadow:
-    inset 0 1px 0 light-dark(#fff, rgba(255, 255, 255, 0.08)),
+    inset 0 1px 0 var(--hl),
     0 30px 80px rgba(0, 0, 0, 0.45);
 }
 .modal-settings {
@@ -2256,7 +2337,7 @@ body {
 }
 .modal-critical:focus-visible {
   outline: 0;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 55%, transparent);
+  box-shadow: var(--focus-ring);
 }
 .modal-switch {
   flex: none;
@@ -2269,8 +2350,9 @@ body {
 .modal-cancel,
 .modal-save {
   flex: 1;
-  padding: 9px;
-  border-radius: 12px;
+  height: var(--h-action);
+  padding: 0 9px;
+  border-radius: var(--r-control);
   font: inherit;
   font-size: 13px;
   text-align: center;
@@ -2300,7 +2382,7 @@ body {
 .modal-cancel:focus-visible,
 .modal-save:focus-visible {
   outline: 0;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 55%, transparent);
+  box-shadow: var(--focus-ring);
 }
 
 /* Destructive confirm button (e.g. import overwrite) — red instead of brand. */
@@ -2327,7 +2409,7 @@ body {
 .modal-textarea,
 .provider-input {
   border: 1px solid var(--stroke);
-  border-radius: 10px;
+  border-radius: var(--r-control);
   background: var(--glass);
   color: var(--text-strong);
 }
@@ -2337,7 +2419,7 @@ body {
 .provider-input:focus {
   outline: 0;
   border-color: var(--brand);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 30%, transparent);
+  box-shadow: var(--focus-ring-soft);
 }
 
 /* ---------- Service modal (textarea variant) ---------- */
@@ -2407,7 +2489,7 @@ body {
   flex-direction: column;
   gap: 8px;
   border: 1px solid var(--card-border);
-  border-radius: 18px;
+  border-radius: var(--r-control); /* inside a 16px sheet, so the corners nest */
   background: var(--card-bg);
   box-shadow: var(--card-shadow);
   padding: 12px 14px 14px;
@@ -2453,8 +2535,8 @@ body {
   margin-bottom: 14px;
 }
 
-/* Status icon picker (Settings → Appearance): two compact segmented rows — the icon (orb and
-   menu bar), then the menu bar's outline or filled look of it. */
+/* Status icon picker (Settings → Appearance): the orb's icon as a segmented row, then the menu bar
+   as a dropdown of five looks. A "?" shows what each state looks like (StatusIconPicker). */
 .icon-pick {
   display: flex;
   flex-direction: column;
@@ -2470,10 +2552,11 @@ body {
 .icon-pick-label {
   font-size: 13px;
   color: var(--text-strong);
+  white-space: nowrap;
 }
 .seg {
   display: flex;
-  width: 200px;
+  width: 194px; /* with the label and the "?", fits the narrowest window (400px) */
   flex-shrink: 0;
   gap: 3px;
   padding: 3px;
@@ -2490,7 +2573,7 @@ body {
   min-width: 0;
   padding: 4px 8px;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--r-control-sm);
   background: transparent;
   color: var(--text-muted);
   font: inherit;
@@ -2506,7 +2589,7 @@ body {
 }
 /* The chosen one: raised, with a brand ring. */
 .seg-opt[aria-checked="true"] {
-  background: light-dark(#fff, rgba(255, 255, 255, 0.12));
+  background: var(--hl-strong);
   box-shadow:
     0 0 0 1.5px var(--brand),
     0 1px 3px light-dark(rgba(30, 28, 60, 0.12), rgba(0, 0, 0, 0.4));
@@ -2515,10 +2598,223 @@ body {
 }
 .seg-opt:focus-visible {
   outline: 0;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 55%, transparent);
+  box-shadow: var(--focus-ring);
 }
-.seg-opt .tray-icon {
+
+/* The "?" beside the "Status icon" label: shows what each status icon state looks like. */
+.icon-help {
+  display: inline-grid;
+  place-items: center;
+  width: 20px;
+  height: 20px;
+  margin-left: 6px;
+  padding: 0;
+  vertical-align: middle;
+  border-radius: 50%;
+  border: 1px solid var(--btn-border);
+  background: var(--btn-bg);
+  box-shadow: var(--btn-shadow);
+  color: var(--text-muted);
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1;
+  cursor: pointer;
+}
+.icon-help:hover,
+.icon-help[aria-expanded="true"] {
+  color: var(--text-strong);
+}
+.icon-help:focus-visible,
+.tray-dd:focus-visible {
+  outline: 0;
+  box-shadow: var(--focus-ring);
+}
+.icon-pick-anchor {
+  position: relative;
+}
+.icon-pick-hint {
+  margin: 0;
+  font-size: 11.5px;
+  color: var(--text-muted);
+}
+/* Popups open over the card on the same menu surface as the list's ⋯ menu. */
+.icon-popover,
+.tray-menu {
+  position: absolute;
+  z-index: 20;
+  top: calc(100% + 6px);
+  padding: 12px;
+  border-radius: var(--r-menu);
+  background: var(--menu-bg);
+  border: 1px solid var(--menu-border);
+  box-shadow: var(--menu-shadow);
+}
+.icon-popover {
+  left: -4px;
+  right: -4px;
+}
+.icon-popover-title {
+  margin-bottom: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+.icon-states {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 6px;
+  text-align: center;
+}
+.icon-state {
+  font-size: 10.5px;
+  line-height: 1.25;
+  color: var(--text-muted);
+}
+.orb-mini {
+  --sev: var(--mood-ok);
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 5px;
+  border-radius: 50%;
+  background:
+    radial-gradient(60% 40% at 50% 14%, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0) 70%),
+    radial-gradient(
+      circle at 35% 30%,
+      color-mix(in srgb, var(--sev) 70%, #fff) 0%,
+      var(--sev) 55%,
+      color-mix(in srgb, var(--sev) 60%, #000) 100%
+    );
+  box-shadow:
+    inset 0 1px 1px rgba(255, 255, 255, 0.35),
+    inset 0 -3px 6px color-mix(in srgb, var(--sev) 75%, #000 25%),
+    0 0 0 3px color-mix(in srgb, var(--sev) var(--tint-2), transparent);
+}
+.orb-mini .orb-icon {
+  width: 28px;
+  height: 28px;
+}
+.orb-mini-warn {
+  --sev: var(--mood-warn);
+}
+.orb-mini-alarm {
+  --sev: var(--mood-alarm);
+}
+.orb-mini-offline {
+  --sev: var(--mood-offline);
+}
+.orb-mini-busy {
+  --sev: var(--mood-busy);
+}
+
+/* The menu bar dropdown: its five states side by side, spread across the box. */
+.tray-dd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 194px; /* the same as .seg, so the two controls line up */
+  height: 36px;
   flex-shrink: 0;
+  padding: 0 14px;
+  border-radius: 12px;
+  cursor: pointer;
+  font: inherit;
+  color: var(--text-strong);
+  background: var(--btn-bg);
+  border: 1px solid var(--btn-border);
+  box-shadow: var(--btn-shadow);
+}
+.tray-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex: 1;
+  min-width: 0;
+}
+.tray-dd .tray-icon {
+  flex: none;
+}
+/* The dropdown and its menu, so the menu opens right under it. */
+.tray-dd-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+/* The menu opens right under the dropdown, centred on it. Three one-line rows of the same height:
+ * the name on the left, the five states on the right in a column that lines up from row to row. */
+.tray-menu {
+  left: 50%;
+  width: 224px;
+  transform: translateX(-50%);
+  display: grid;
+  gap: 7px; /* room for the hairline between the rows, clear of the hover fill and the chosen ring */
+  padding: 6px;
+}
+.tray-opt {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  width: 100%;
+  height: 36px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: var(--r-control-sm);
+  background: transparent;
+  color: var(--text-strong);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+.tray-opt:hover {
+  background: var(--fill-2);
+}
+/* A hairline between the options that fades out at both ends; it sits in the gap, so neither the hover
+   fill nor the chosen ring touches it. */
+.tray-opt + .tray-opt::before {
+  content: "";
+  position: absolute;
+  top: -4px;
+  left: 6px;
+  right: 6px;
+  height: 1px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--text-strong) var(--tint-2), transparent) 25%,
+    color-mix(in srgb, var(--text-strong) var(--tint-2), transparent) 75%,
+    transparent
+  );
+}
+.tray-opt[aria-selected="true"] {
+  background: var(--hl);
+  box-shadow: 0 0 0 1.5px var(--brand);
+}
+.tray-opt:focus-visible {
+  outline: 0;
+  box-shadow: var(--focus-ring);
+}
+.tray-opt b {
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.tray-opt .tray-strip {
+  flex: none;
+  width: 100px; /* five 16px icons with 5px between */
+}
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .orb-thumb {
   --sev: var(--mood-ok);
@@ -2573,7 +2869,7 @@ body {
 }
 .config-action-btn:focus-visible {
   outline: 0;
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 55%, transparent);
+  box-shadow: var(--focus-ring);
 }
 /* Theme + Reset to defaults (moved here from the old hero menu). */
 .theme-btn,
@@ -2640,7 +2936,7 @@ body {
 .interval-row input:focus {
   outline: 0;
   border-color: var(--brand);
-  box-shadow: 0 0 0 3px color-mix(in srgb, var(--brand) 30%, transparent);
+  box-shadow: var(--focus-ring-soft);
 }
 .settings-note {
   font-size: 12px;
@@ -3035,7 +3331,7 @@ button:disabled {
   height: 26px;
   padding: 0;
   border: 0;
-  border-radius: 9px;
+  border-radius: var(--r-control-sm);
   background: none;
   color: inherit;
   opacity: 0.7;
@@ -3043,5 +3339,5 @@ button:disabled {
 }
 .notice-close:hover {
   opacity: 1;
-  background: color-mix(in srgb, currentColor 10%, transparent);
+  background: color-mix(in srgb, currentColor var(--tint-1), transparent);
 }

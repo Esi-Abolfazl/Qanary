@@ -467,6 +467,7 @@ mod tests {
             hide_dock: false,
             status_icon: Default::default(),
             tray_filled: false,
+            tray_shape: Default::default(),
             last_changelog_version: None,
         };
         let lists = checking_lists(&config);

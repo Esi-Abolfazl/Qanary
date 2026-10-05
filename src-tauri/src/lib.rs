@@ -125,7 +125,7 @@ pub fn run() {
 
             // Snapshot the flags we need before moving `config` into the managed state.
             let hide_dock = config.hide_dock;
-            let (status_icon, tray_filled) = (config.status_icon, config.tray_filled);
+            let (status_icon, tray_filled) = config.tray_look();
 
             // Broadcast channel for the "probe now" signal. Capacity 1 is enough: a missed
             // value just means a task was mid-probe, which is exactly when we don't need to wake it.

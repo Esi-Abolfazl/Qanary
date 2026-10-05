@@ -146,12 +146,15 @@ fn sd_round_rect(x: f32, y: f32, half: f32, corner: f32) -> f32 {
     (qx.max(0.0).powi(2) + qy.max(0.0).powi(2)).sqrt() + qx.max(qy).min(0.0) - corner
 }
 
-/// A filled rounded-square plate behind the glyph; the glyph is cut out of it (transparent).
+/// A filled plate behind the glyph; the glyph is cut out of it (transparent). `corner == half` is
+/// a circle.
 struct Plate {
     half: f32,
     corner: f32,
 }
-const PLATE: Plate = Plate { half: 11.0, corner: 4.8 };
+/// Pulse sits on a rounded square, Rings on a circle.
+const PLATE_SQUARE: Plate = Plate { half: 11.0, corner: 4.8 };
+const PLATE_ROUND: Plate = Plate { half: 11.0, corner: 11.0 };
 
 /// The picture a style draws; `TrayStyle` adds whether it sits on a filled plate.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -169,33 +172,42 @@ fn split(style: TrayStyle) -> (Glyph, bool) {
     }
 }
 
-/// One shape. `a` is its opacity. `dash` = (on, off) lengths in box units, butt-capped.
+/// One shape. `a` is its opacity. `dash` = (on, off) lengths in box units.
 enum Prim {
-    /// A circle outline around the box centre.
-    Ring { r: f32, w: f32, a: f32, dash: Option<(f32, f32)> },
+    /// A circle outline around the box centre. `round`: the dashes have round ends, so a dash
+    /// shorter than the stroke is wide reads as a dot; otherwise they are butt-capped.
+    Ring { r: f32, w: f32, a: f32, dash: Option<(f32, f32)>, round: bool },
     /// A polyline with round caps and joins.
-    /// `k` shrinks the points toward the box centre (1.0 = as written); `w` and `dash` are in
+    /// `k` shrinks the points toward the box centre (1.0 = as written); `w` is in
     /// box units, already final.
-    Line { pts: &'static [(f32, f32)], w: f32, a: f32, dash: Option<(f32, f32)>, k: f32 },
+    Line { pts: &'static [(f32, f32)], w: f32, a: f32, k: f32 },
     /// A rounded-square outline around the box centre (`half` = half the side).
     Frame { half: f32, corner: f32, w: f32, a: f32 },
-    /// A solid dot.
-    Dot { x: f32, y: f32, r: f32 },
-    /// Part of a circle outline around (`cx`, `cy`): `span` radians from angle `from`, both
-    /// clockwise on screen from 3 o'clock, like an SVG arc with sweep-flag 1. Dashes start at `from`.
-    Arc { cx: f32, cy: f32, r: f32, w: f32, a: f32, dash: Option<(f32, f32)>, from: f32, span: f32 },
+    /// A solid dot of opacity `a`.
+    Dot { x: f32, y: f32, r: f32, a: f32 },
+    /// A solid, round-ended part of a circle outline around (`cx`, `cy`): `span` radians from
+    /// angle `from`, both clockwise on screen from 3 o'clock, like an SVG arc with sweep-flag 1.
+    /// `clear`: a gap — nothing is drawn within `radius` of the segment `a`–`b` (already in box
+    /// units), so a shape drawn over the arc does not run into it.
+    Arc {
+        cx: f32,
+        cy: f32,
+        r: f32,
+        w: f32,
+        a: f32,
+        from: f32,
+        span: f32,
+        clear: Option<((f32, f32), (f32, f32), f32)>,
+    },
 }
 
 const RING_W: f32 = 1.9;
-const LINE_W: f32 = 2.2;
 
-// Pulse traces (the in-app `BEAT_OK` / `BEAT_WARN` / flat line, as points).
+// Pulse traces (the in-app `BEAT_OK` / `BEAT_WARN`, as points) and the X of the Alarm look.
 const BEAT_OK: &[(f32, f32)] = &[(2., 12.), (6., 12.), (9., 3.), (15., 21.), (18., 12.), (22., 12.)];
 const BEAT_WARN: &[(f32, f32)] = &[(2., 12.), (10., 12.), (12., 8.), (15., 16.), (17., 12.), (22., 12.)];
-const FLAT: &[(f32, f32)] = &[(2., 12.), (22., 12.)];
 const CROSS_A: &[(f32, f32)] = &[(9., 8.), (15., 16.)];
 const CROSS_B: &[(f32, f32)] = &[(15., 8.), (9., 16.)];
-const SLASH: &[(f32, f32)] = &[(4.5, 4.5), (19.5, 19.5)];
 /// The Pulse icon sits in a rounded square: the frame, and the trace shrunk to fit inside it.
 const FRAME_HALF: f32 = 10.4;
 const FRAME_CORNER: f32 = 4.0;
@@ -203,59 +215,87 @@ const PULSE_FIT: f32 = 0.7;
 const PULSE_W: f32 = 1.9;
 const BANG: &[(f32, f32)] = &[(12., 9.), (12., 12.6)];
 
-/// Offline: the in-app `WIFI_OFF` — three dashed 90° arcs over one focal point, a dot, and the
-/// slash. One picture for every look, as in the app; `k` shrinks it toward the centre for the plate.
-fn wifi_off(k: f32, w: f32, slash_w: f32, dot_r: f32) -> Vec<Prim> {
+// Offline: a Wi-Fi whose first dot is the dot of a "!". Before it is shrunk: three solid 90° arcs
+// over one focal point, the dot on that point, and the "!"'s bar above the arcs.
+const WIFI_FOCUS: (f32, f32) = (12.0, 18.6);
+const WIFI_ARCS: [(f32, f32); 3] = [(4.6, 1.0), (9.1, 0.85), (13.6, 0.7)]; // (radius, opacity)
+const WIFI_BAR: &[(f32, f32)] = &[(12., 4.9), (12., 12.9)];
+
+/// The Wi-Fi with its "!", shrunk toward the centre by `k` (widths are final, in box units): the
+/// arcs `arc_w` wide, the bar `bar_w`, the dot `dot_r`. The bar casts a gap `gap_r` wide each side
+/// of it out of the arcs, so the "!" lies over the Wi-Fi instead of running through it.
+fn wifi_off(k: f32, arc_w: f32, bar_w: f32, dot_r: f32, gap_r: f32) -> Vec<Prim> {
     use std::f32::consts::PI;
-    let fit = |v: f32| CENTER + (v - CENTER) * k;
-    let (cx, cy) = (fit(12.0), fit(19.5));
-    let arc = |r: f32, a, on: f32, off: f32| Prim::Arc {
-        cx, cy, r: r * k, w, a, dash: Some((on * k, off * k)), from: 1.25 * PI, span: 0.5 * PI,
-    };
-    vec![
-        arc(6.0, 1.0, 2.2, 1.8),
-        arc(10.5, 0.85, 2.8, 2.2),
-        arc(15.0, 0.7, 3.4, 2.6),
-        Prim::Dot { x: cx, y: cy, r: dot_r },
-        Prim::Line { pts: SLASH, w: slash_w, a: 1.0, dash: None, k },
-    ]
+    let fit = |(x, y): (f32, f32)| (CENTER + (x - CENTER) * k, CENTER + (y - CENTER) * k);
+    let (cx, cy) = fit(WIFI_FOCUS);
+    let clear = Some((fit(WIFI_BAR[0]), fit(WIFI_BAR[1]), gap_r));
+    let mut v: Vec<Prim> = WIFI_ARCS
+        .iter()
+        .map(|&(r, a)| Prim::Arc { cx, cy, r: r * k, w: arc_w, a, from: 1.25 * PI, span: 0.5 * PI, clear })
+        .collect();
+    v.push(Prim::Dot { x: cx, y: cy, r: dot_r, a: 1.0 });
+    v.push(Prim::Line { pts: WIFI_BAR, w: bar_w, a: 1.0, k });
+    v
 }
 
-/// The shapes for one style + mood. Opacities are the app's, nudged up a little: the app draws
-/// on a coloured orb, the tray draws straight on the menu bar, where faint rings would vanish.
+/// The Wi-Fi's size on the bare menu bar: beside Rings' outer ring, or inside Pulse's frame.
+fn wifi_bare() -> Vec<Prim> {
+    wifi_off(0.74, 1.6, 1.7, 1.1, 2.45)
+}
+
+/// A Pulse "dead line": two dots each side of the X, which sits between them.
+fn dead_line(xs: [f32; 4]) -> Vec<Prim> {
+    xs.into_iter().map(|x| Prim::Dot { x, y: 12.0, r: 0.95, a: 0.85 }).collect()
+}
+
+/// The shapes for one style + mood. Opacities are higher than the app's: the app draws on a
+/// coloured orb, the tray draws straight on the menu bar (and the picker's preview on a card),
+/// where rings at half strength read as dull and muddy.
+/// Dashed rings are dotted: the dash is shorter than the stroke is wide, with round ends.
 fn prims(glyph: Glyph, mood: Mood) -> Vec<Prim> {
-    let ring = |r, a, dash| Prim::Ring { r, w: RING_W, a, dash };
+    let ring = |r, a, dash| Prim::Ring { r, w: RING_W, a, dash, round: dash.is_some() };
     match (glyph, mood) {
-        (_, Mood::Offline) => wifi_off(1.0, RING_W, LINE_W, 1.3),
+        // Offline on Pulse keeps the rounded square, like every other Pulse state, with the Wi-Fi
+        // inside it; Rings keeps a plain outer ring around its Wi-Fi.
+        (Glyph::Pulse, Mood::Offline) => {
+            let mut v = vec![Prim::Frame { half: FRAME_HALF, corner: FRAME_CORNER, w: RING_W, a: 0.9 }];
+            v.extend(wifi_bare());
+            v
+        }
+        (Glyph::Rings, Mood::Offline) => {
+            let mut v = vec![ring(10.6, 0.9, None)];
+            v.extend(wifi_bare());
+            v
+        }
         (Glyph::Rings, Mood::Ok | Mood::Busy) => {
-            vec![ring(3.2, 1.0, None), ring(6.8, 0.75, None), ring(10.6, 0.5, None)]
+            vec![ring(3.2, 1.0, None), ring(6.8, 0.9, None), ring(10.6, 0.8, None)]
         }
         (Glyph::Rings, Mood::Warn) => vec![
-            ring(6.8, 0.8, None),
-            ring(10.6, 0.6, Some((3.0, 2.12))),
-            Prim::Line { pts: BANG, w: 2.0, a: 1.0, dash: None, k: 1.0 },
-            Prim::Dot { x: 12.0, y: 15.6, r: 1.2 },
+            ring(6.8, 1.0, None),
+            ring(10.6, 0.85, Some((1.1, 4.02))),
+            Prim::Line { pts: BANG, w: 2.0, a: 1.0, k: 1.0 },
+            Prim::Dot { x: 12.0, y: 15.6, r: 1.2, a: 1.0 },
         ],
-        // Dash periods divide each circumference evenly (5, 10 and 14 dashes), so there is no
-        // odd-sized dash where the pattern meets itself.
+        // Dash periods divide each circumference evenly (5, 10 and 14 dots), so there is no
+        // odd-sized gap where the pattern meets itself.
         (Glyph::Rings, Mood::Alarm) => vec![
-            ring(3.2, 1.0, Some((2.4, 1.62))),
-            ring(6.8, 0.8, Some((2.7, 1.57))),
-            ring(10.6, 0.55, Some((3.0, 1.76))),
+            ring(3.2, 1.0, Some((0.5, 3.52))),
+            ring(6.8, 0.95, Some((0.8, 3.47))),
+            ring(10.6, 0.85, Some((1.1, 3.66))),
         ],
         // Pulse: every other state sits inside the same rounded square.
         (Glyph::Pulse, mood) => {
-            let line = |pts, a, dash, k| Prim::Line { pts, w: PULSE_W, a, dash, k };
-            let mut v = vec![Prim::Frame { half: FRAME_HALF, corner: FRAME_CORNER, w: RING_W, a: 0.75 }];
+            let line = |pts, a, k| Prim::Line { pts, w: PULSE_W, a, k };
+            let mut v = vec![Prim::Frame { half: FRAME_HALF, corner: FRAME_CORNER, w: RING_W, a: 0.9 }];
             if mood == Mood::Warn {
-                v.push(line(BEAT_WARN, 1.0, None, PULSE_FIT));
+                v.push(line(BEAT_WARN, 1.0, PULSE_FIT));
             } else if mood == Mood::Alarm {
-                // A dead flat line marked with an X. (The dash period divides the line evenly.)
-                v.push(line(FLAT, 0.7, Some((1.75, 1.75)), PULSE_FIT));
-                v.push(line(CROSS_A, 1.0, None, 0.95));
-                v.push(line(CROSS_B, 1.0, None, 0.95));
+                // A dead line, drawn as dots, marked with an X.
+                v.extend(dead_line([4.7, 6.8, 17.2, 19.3]));
+                v.push(line(CROSS_A, 1.0, 0.95));
+                v.push(line(CROSS_B, 1.0, 0.95));
             } else {
-                v.push(line(BEAT_OK, 1.0, None, PULSE_FIT));
+                v.push(line(BEAT_OK, 1.0, PULSE_FIT));
             }
             v
         }
@@ -267,37 +307,36 @@ const FILLED_RING_W: f32 = 1.7;
 /// The glyph for the filled look: the same pictures, sized to sit inside the plate. They are cut
 /// out of the plate, so opacities are a little higher than on the bare menu bar.
 fn filled_prims(glyph: Glyph, mood: Mood) -> Vec<Prim> {
-    let ring = |r, a, dash| Prim::Ring { r, w: FILLED_RING_W, a, dash };
-    let line = |pts, w, a, dash, k| Prim::Line { pts, w, a, dash, k };
+    let ring = |r, a, dash| Prim::Ring { r, w: FILLED_RING_W, a, dash, round: dash.is_some() };
+    let line = |pts, w, a, k| Prim::Line { pts, w, a, k };
     match (glyph, mood) {
-        (_, Mood::Offline) => wifi_off(0.72, FILLED_RING_W, 2.0, 1.1),
+        (_, Mood::Offline) => wifi_off(0.72, 1.7, 2.0, 1.1, 2.6),
         (Glyph::Rings, Mood::Ok | Mood::Busy) => {
             vec![ring(2.3, 1.0, None), ring(5.0, 0.85, None), ring(7.7, 0.65, None)]
         }
         (Glyph::Rings, Mood::Warn) => vec![
             ring(5.0, 0.9, None),
-            ring(7.7, 0.65, Some((2.5, 1.53))),
-            line(BANG, 1.7, 1.0, None, 0.72),
-            Prim::Dot { x: 12.0, y: 14.6, r: 1.0 },
+            ring(7.7, 0.65, Some((0.8, 3.23))),
+            line(BANG, 1.7, 1.0, 0.72),
+            Prim::Dot { x: 12.0, y: 14.6, r: 1.0, a: 1.0 },
         ],
-        // Two coarse dashed rings, not three: at this size three read as noise. Dash periods
-        // divide each circumference evenly (4 and 9 dashes).
+        // The bare alarm's dotted rings with the outer one dropped, as holes in the plate. Same dot
+        // counts as the bare icon (5 and 10); the periods divide each circumference evenly.
         (Glyph::Rings, Mood::Alarm) => vec![
-            ring(3.0, 1.0, Some((3.0, 1.71))),
-            ring(7.4, 0.8, Some((3.4, 1.77))),
+            ring(3.0, 1.0, Some((0.5, 3.27))),
+            ring(6.4, 0.8, Some((0.5, 3.521))),
         ],
         (Glyph::Pulse, mood) => {
-            let trace = |pts, a, dash| line(pts, PULSE_W, a, dash, 0.78);
+            let trace = |pts, a| line(pts, PULSE_W, a, 0.78);
             if mood == Mood::Warn {
-                vec![trace(BEAT_WARN, 1.0, None)]
+                vec![trace(BEAT_WARN, 1.0)]
             } else if mood == Mood::Alarm {
-                vec![
-                    trace(FLAT, 0.7, Some((1.95, 1.95))),
-                    line(CROSS_A, PULSE_W, 1.0, None, 0.95),
-                    line(CROSS_B, PULSE_W, 1.0, None, 0.95),
-                ]
+                let mut v = dead_line([4.0, 6.4, 17.6, 20.0]);
+                v.push(line(CROSS_A, PULSE_W, 1.0, 0.95));
+                v.push(line(CROSS_B, PULSE_W, 1.0, 0.95));
+                v
             } else {
-                vec![trace(BEAT_OK, 1.0, None)]
+                vec![trace(BEAT_OK, 1.0)]
             }
         }
     }
@@ -306,9 +345,10 @@ fn filled_prims(glyph: Glyph, mood: Mood) -> Vec<Prim> {
 /// Opacity of one shape at a point of the 24-unit box (0 = outside it).
 fn prim_alpha(p: &Prim, x: f32, y: f32) -> f32 {
     match *p {
-        Prim::Ring { r, w, a, dash } => {
+        Prim::Ring { r, w, a, dash, round } => {
             let (dx, dy) = (x - CENTER, y - CENTER);
-            if ((dx * dx + dy * dy).sqrt() - r).abs() > w / 2.0 {
+            let off_ring = (dx * dx + dy * dy).sqrt() - r;
+            if off_ring.abs() > w / 2.0 {
                 return 0.0;
             }
             if let Some((on, off)) = dash {
@@ -317,38 +357,35 @@ fn prim_alpha(p: &Prim, x: f32, y: f32) -> f32 {
                 if theta < 0.0 {
                     theta += std::f32::consts::TAU;
                 }
-                if (theta * r) % (on + off) > on {
+                let pos = (theta * r) % (on + off);
+                if round {
+                    // A dash with round ends: a pixel counts when it is within half the stroke
+                    // of the dash's centre line, measured along the ring and across it.
+                    let along = if pos <= on { 0.0 } else { (pos - on).min(on + off - pos) };
+                    if (along * along + off_ring * off_ring).sqrt() > w / 2.0 {
+                        return 0.0;
+                    }
+                } else if pos > on {
                     return 0.0;
                 }
             }
             a
         }
-        Prim::Line { pts, w, a, dash, k } => {
-            // Nearest point on the polyline, and how far along it that point is.
-            let (mut best, mut along, mut walked) = (f32::MAX, 0.0_f32, 0.0_f32);
+        Prim::Line { pts, w, a, k } => {
+            // Distance to the nearest point on the polyline.
+            let fit = |(px, py): (f32, f32)| (CENTER + (px - CENTER) * k, CENTER + (py - CENTER) * k);
+            let mut best = f32::MAX;
             for seg in pts.windows(2) {
-                let fit = |(px, py): (f32, f32)| (CENTER + (px - CENTER) * k, CENTER + (py - CENTER) * k);
                 let ((ax, ay), (bx, by)) = (fit(seg[0]), fit(seg[1]));
                 let (vx, vy) = (bx - ax, by - ay);
-                let len2 = vx * vx + vy * vy;
-                let t = (((x - ax) * vx + (y - ay) * vy) / len2).clamp(0.0, 1.0);
-                let (qx, qy) = (ax + t * vx, ay + t * vy);
-                let d = ((x - qx).powi(2) + (y - qy).powi(2)).sqrt();
-                if d < best {
-                    best = d;
-                    along = walked + t * len2.sqrt();
-                }
-                walked += len2.sqrt();
+                let t = (((x - ax) * vx + (y - ay) * vy) / (vx * vx + vy * vy)).clamp(0.0, 1.0);
+                best = best.min(((x - ax - t * vx).powi(2) + (y - ay - t * vy).powi(2)).sqrt());
             }
             if best > w / 2.0 {
-                return 0.0;
+                0.0
+            } else {
+                a
             }
-            if let Some((on, off)) = dash {
-                if along % (on + off) > on {
-                    return 0.0;
-                }
-            }
-            a
         }
         Prim::Frame { half, corner, w, a } => {
             // The outline is the band of width `w` around the rounded square's edge.
@@ -358,28 +395,34 @@ fn prim_alpha(p: &Prim, x: f32, y: f32) -> f32 {
                 0.0
             }
         }
-        Prim::Dot { x: cx, y: cy, r } => {
+        Prim::Dot { x: cx, y: cy, r, a } => {
             if ((x - cx).powi(2) + (y - cy).powi(2)).sqrt() <= r {
-                1.0
+                a
             } else {
                 0.0
             }
         }
-        Prim::Arc { cx, cy, r, w, a, dash, from, span } => {
-            let (dx, dy) = (x - cx, y - cy);
-            if ((dx * dx + dy * dy).sqrt() - r).abs() > w / 2.0 {
-                return 0.0;
-            }
-            let past = (dy.atan2(dx) - from).rem_euclid(std::f32::consts::TAU);
-            if past > span {
-                return 0.0;
-            }
-            if let Some((on, off)) = dash {
-                if (past * r) % (on + off) > on {
+        Prim::Arc { cx, cy, r, w, a, from, span, clear } => {
+            if let Some(((ax, ay), (bx, by), radius)) = clear {
+                let (vx, vy) = (bx - ax, by - ay);
+                let t = (((x - ax) * vx + (y - ay) * vy) / (vx * vx + vy * vy)).clamp(0.0, 1.0);
+                if ((x - (ax + t * vx)).powi(2) + (y - (ay + t * vy)).powi(2)).sqrt() < radius {
                     return 0.0;
                 }
             }
-            a
+            let (dx, dy) = (x - cx, y - cy);
+            let past = (dy.atan2(dx) - from).rem_euclid(std::f32::consts::TAU);
+            let on_arc = past <= span && ((dx * dx + dy * dy).sqrt() - r).abs() <= w / 2.0;
+            // Round ends: within half the stroke of either end point.
+            let near = |angle: f32| {
+                let (ex, ey) = (cx + r * angle.cos(), cy + r * angle.sin());
+                ((x - ex).powi(2) + (y - ey).powi(2)).sqrt() <= w / 2.0
+            };
+            if on_arc || near(from) || near(from + span) {
+                a
+            } else {
+                0.0
+            }
         }
     }
 }
@@ -400,7 +443,8 @@ fn checking_frame(style: TrayStyle, pulse: f32) -> tauri::image::Image<'static> 
 fn render(style: TrayStyle, mood: Mood, rgb: (u8, u8, u8), pulse: f32) -> tauri::image::Image<'static> {
     let (glyph, filled) = split(style);
     if filled {
-        draw_icon(&filled_prims(glyph, mood), rgb, pulse, Some(&PLATE))
+        let plate = if glyph == Glyph::Rings { &PLATE_ROUND } else { &PLATE_SQUARE };
+        draw_icon(&filled_prims(glyph, mood), rgb, pulse, Some(plate))
     } else {
         draw_icon(&prims(glyph, mood), rgb, pulse, None)
     }
@@ -544,7 +588,7 @@ fn dot_icon(dot: Dot) -> Image<'static> {
         Dot::Checking => COLOR_CHECKING,
     };
     // macOS shows menu icons 18 pt square; the dot fills about two thirds of that.
-    draw_icon(&[Prim::Dot { x: CENTER, y: CENTER, r: 8.0 }], rgb, 1.0, None)
+    draw_icon(&[Prim::Dot { x: CENTER, y: CENTER, r: 8.0, a: 1.0 }], rgb, 1.0, None)
 }
 
 /// The tray menu: one row per list (a coloured dot and "name · 3/5"), then the fixed actions.
@@ -681,12 +725,11 @@ mod tests {
         assert_eq!(at(&img, 12.0, 20.0).3, 0, "nothing below the trace's centre section");
     }
 
-    /// Every Pulse state but Offline (the shared Wi-Fi off) sits in the same rounded-square frame
-    /// (and Rings has none).
+    /// Every Pulse state, Offline too, sits in the same rounded-square frame (and Rings has none).
     #[test]
     fn pulse_states_sit_in_a_rounded_square() {
-        for sev in SEVERITIES {
-            let (cut_off, img) = (false, settled_icon(sev, false, TrayStyle::Pulse));
+        for (sev, cut_off) in SEVERITIES.into_iter().map(|s| (s, false)).chain([(Severity::Red, true)]) {
+            let img = settled_icon(sev, cut_off, TrayStyle::Pulse);
             assert!(at(&img, CENTER + FRAME_HALF, CENTER).3 > 150, "{sev:?}/{cut_off}: frame edge");
             assert!(at(&img, CENTER, CENTER - FRAME_HALF).3 > 150, "{sev:?}/{cut_off}: frame top");
             // Rounded: the very corner of the square is empty.
@@ -697,33 +740,86 @@ mod tests {
         assert_eq!(at(&rings, CENTER + FRAME_HALF, CENTER - FRAME_HALF + 2.0).3, 0);
     }
 
-    /// Cut-off wins over the severity: gray Wi-Fi off — a slash and the arcs' focal dot that Alarm
-    /// doesn't have — one picture for both bare looks and one for both filled looks.
+    /// Cut-off wins over the severity: a gray Wi-Fi whose first dot is the dot of a "!". Rings
+    /// keeps a plain outer ring around it, Pulse its rounded-square frame, and the filled looks
+    /// put the same picture on a circle (Rings) or a rounded square (Pulse). The bar is solid on a bare icon and a hole in a filled one.
     #[test]
-    fn offline_is_a_gray_wifi_off_in_every_look() {
+    fn offline_is_a_gray_wifi_with_a_bang_in_every_look() {
         for style in STYLES {
             let off = settled_icon(Severity::Red, true, style);
             let alarm = settled_icon(Severity::Red, false, style);
             let opaque = off.rgba().chunks(4).find(|p| p[3] == 255).expect("an opaque pixel");
             assert_eq!((opaque[0], opaque[1], opaque[2]), COLOR_OFFLINE);
             assert_ne!(off.rgba(), alarm.rgba(), "{style:?}: offline must differ from alarm");
-            // The slash crosses the centre and the dot sits under the arcs: solid on a bare icon,
-            // holes in a filled one.
+
             let filled = matches!(style, TrayStyle::RingsFilled | TrayStyle::PulseFilled);
-            let dot_y = if filled { CENTER + 7.5 * 0.72 } else { 19.5 };
-            for (what, y) in [("slash", CENTER), ("dot", dot_y)] {
-                let alpha = at(&off, CENTER, y).3;
-                assert!(if filled { alpha < 40 } else { alpha == 255 }, "{style:?}: {what} alpha {alpha}");
-            }
+            let k = if filled { 0.72 } else { 0.74 };
+            let fit = |v: f32| CENTER + (v - CENTER) * k;
+            let solid = |alpha: u8| if filled { alpha < 40 } else { alpha == 255 };
+            // The dot (the Wi-Fi's focal point, also the "!"'s dot) and the middle of the bar.
+            assert!(solid(at(&off, CENTER, fit(18.6)).3), "{style:?}: the dot");
+            assert!(solid(at(&off, CENTER, fit(8.9)).3), "{style:?}: the bar");
+            // The middle arc, both beside the bar's gap (cleared) and further out (drawn).
+            let arc_y = |dx: f32| fit(18.6) - ((9.1 * k).powi(2) - dx * dx).sqrt();
+            let gap_r = if filled { 2.6 } else { 2.45 };
+            let (near, far) = (gap_r - 0.5, gap_r + 1.2);
+            // The middle arc is 85% opaque: a bare icon draws it, a filled one leaves a faint hole.
+            let drawn = |alpha: u8| if filled { alpha < 100 } else { alpha > 150 };
+            // Cleared beside the bar: empty on a bare icon, plate (solid) on a filled one.
+            let cleared = |alpha: u8| if filled { alpha > 215 } else { alpha == 0 };
+            assert!(cleared(at(&off, CENTER + near, arc_y(near)).3), "{style:?}: arc cleared beside the bar");
+            assert!(drawn(at(&off, CENTER + far, arc_y(far)).3), "{style:?}: arc drawn away from the bar");
         }
+        // Pulse offline sits in the rounded-square frame; Rings has a plain outer ring instead.
+        let pulse = settled_icon(Severity::Red, true, TrayStyle::Pulse);
+        assert!(at(&pulse, CENTER + FRAME_HALF, CENTER).3 > 150, "Pulse keeps its frame");
+        let rings = settled_icon(Severity::Red, true, TrayStyle::Rings);
+        assert!(at(&rings, CENTER + 10.6, CENTER).3 > 100, "Rings has its outer ring");
+        assert_eq!(at(&rings, CENTER + FRAME_HALF, CENTER - FRAME_HALF + 2.0).3, 0, "and no frame");
         let off = |style| settled_icon(Severity::Red, true, style).rgba().to_vec();
-        assert_eq!(off(TrayStyle::Rings), off(TrayStyle::Pulse), "one Wi-Fi off for the bare looks");
-        assert_eq!(off(TrayStyle::RingsFilled), off(TrayStyle::PulseFilled), "and one for the filled");
+        assert_ne!(off(TrayStyle::Rings), off(TrayStyle::Pulse), "the bare looks differ");
+        assert_ne!(off(TrayStyle::RingsFilled), off(TrayStyle::PulseFilled), "Rings' plate is round, Pulse's square");
         // Cut-off wins whatever the severity says.
         assert_eq!(
             settled_icon(Severity::Green, true, TrayStyle::Rings).rgba(),
             settled_icon(Severity::Red, true, TrayStyle::Rings).rgba()
         );
+    }
+
+    /// A dotted ring's dash is shorter than the stroke is wide, with round ends: it is a round dot
+    /// (a pixel just past the dash's end is still inside it) and the gap between two is empty.
+    #[test]
+    fn dotted_rings_have_round_dots_and_empty_gaps() {
+        let ring = |round| Prim::Ring { r: 6.8, w: RING_W, a: 0.8, dash: Some((0.8, 3.47)), round };
+        let at_arc = |u: f32, dr: f32| {
+            let th = u / 6.8;
+            (CENTER + (6.8 + dr) * th.cos(), CENTER + (6.8 + dr) * th.sin())
+        };
+        let (x, y) = at_arc(0.4, 0.0); // the first dot's centre
+        assert_eq!(prim_alpha(&ring(true), x, y), 0.8);
+        let (x, y) = at_arc(0.8 + 0.6, 0.0); // 0.6 past the dash's end: inside the round cap, not the butt
+        assert_eq!(prim_alpha(&ring(true), x, y), 0.8, "round end");
+        assert_eq!(prim_alpha(&ring(false), x, y), 0.0, "butt end stops at the dash");
+        let (x, y) = at_arc(0.8 + 3.47 / 2.0, 0.0); // the middle of the gap
+        assert_eq!(prim_alpha(&ring(true), x, y), 0.0, "gap");
+        let (x, y) = at_arc(0.4, 1.4); // off the ring's band
+        assert_eq!(prim_alpha(&ring(true), x, y), 0.0, "outside the stroke");
+    }
+
+    /// Pulse's Alarm is a dead line drawn as two dots each side of the X, in the same rounded square.
+    #[test]
+    fn pulse_alarm_is_a_dotted_dead_line_with_an_x() {
+        let img = settled_icon(Severity::Red, false, TrayStyle::Pulse);
+        for x in [4.7, 6.8, 17.2, 19.3] {
+            let a = at(&img, x, 12.0).3;
+            assert!((100..255).contains(&(a as i32)), "dot at {x}: alpha {a} (70% opaque)");
+        }
+        assert_eq!(at(&img, 12.0, 12.0).3, 255, "the X crosses the middle");
+        for x in [8.5, 15.5] {
+            assert_eq!(at(&img, x, 12.0).3, 0, "nothing joins a dot to the X at {x}: no dashed line");
+        }
+        let filled = settled_icon(Severity::Red, false, TrayStyle::PulseFilled);
+        assert!(at(&filled, 4.0, 12.0).3 < 150, "filled: the dots are holes in the plate");
     }
 
     /// `init_style` is what the redraw reads back: the config's icon and fill pick one look each.
@@ -814,18 +910,20 @@ mod tests {
         }
     }
 
-    /// Filled looks: a coloured rounded plate with the glyph cut out of it.
+    /// Filled looks: a coloured plate (a circle for Rings, a rounded square for Pulse) with the glyph cut out.
     #[test]
     fn filled_icons_are_a_plate_with_the_glyph_cut_out() {
         for style in [TrayStyle::RingsFilled, TrayStyle::PulseFilled] {
             let img = settled_icon(Severity::Green, false, style);
             assert_eq!(at(&img, 0.2, 0.2).3, 0, "{style:?}: plate corners are rounded");
-            // The plate's own edge is solid, in the mood colour.
-            let (r, g, b, a) = at(&img, CENTER + 10.2, CENTER + 6.0);
+            // The plate's own edge is solid, in the mood colour (a circle is narrower off-axis).
+            let (x, y) = if style == TrayStyle::RingsFilled { (CENTER + 8.5, CENTER + 6.0) } else { (CENTER + 10.2, CENTER + 6.0) };
+            let (r, g, b, a) = at(&img, x, y);
             assert_eq!((r, g, b, a), (COLOR_OK.0, COLOR_OK.1, COLOR_OK.2, 255), "{style:?}");
             // Cut out of the plate: far fewer opaque pixels than a plain plate, but not none.
             let opaque = img.rgba().chunks(4).filter(|p| p[3] == 255).count();
-            assert!(opaque > 800 && opaque < 1700, "{style:?}: {opaque} opaque px");
+            let least = if style == TrayStyle::RingsFilled { 400 } else { 800 }; // a circle is smaller
+            assert!(opaque > least && opaque < 1700, "{style:?}: {opaque} opaque px");
         }
         // Rings: the middle ring (r = 5) is a hole, the very centre is not.
         let rings = settled_icon(Severity::Green, false, TrayStyle::RingsFilled);

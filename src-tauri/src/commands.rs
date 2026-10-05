@@ -172,7 +172,8 @@ pub fn reset_config(app: AppHandle) -> Result<Config, String> {
         Ok(())
     })?;
     apply_dock_policy(&app, cfg.hide_dock);
-    crate::tray::set_style(&app, cfg.status_icon, cfg.tray_filled);
+    let (icon, filled) = cfg.tray_look();
+    crate::tray::set_style(&app, icon, filled);
     Ok(cfg)
 }
 
@@ -202,12 +203,13 @@ pub struct SettingsPatch {
     pub hide_dock: Option<bool>,
     pub status_icon: Option<crate::models::StatusIcon>,
     pub tray_filled: Option<bool>,
+    pub tray_shape: Option<crate::models::TrayShape>,
 }
 
 #[tauri::command]
 pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> Result<Config, String> {
     let hide_dock = patch.hide_dock;
-    let tray_look = patch.status_icon.is_some() || patch.tray_filled.is_some();
+    let tray_look = patch.status_icon.is_some() || patch.tray_filled.is_some() || patch.tray_shape.is_some();
     let cfg = mutate(&app, |cfg| {
         apply_settings(cfg, patch);
         Ok(())
@@ -216,7 +218,8 @@ pub fn update_settings(app: AppHandle, patch: SettingsPatch) -> Result<Config, S
         apply_dock_policy(&app, cfg.hide_dock);
     }
     if tray_look {
-        crate::tray::set_style(&app, cfg.status_icon, cfg.tray_filled);
+        let (icon, filled) = cfg.tray_look();
+        crate::tray::set_style(&app, icon, filled);
     }
     Ok(cfg)
 }
@@ -261,6 +264,9 @@ fn apply_settings(cfg: &mut Config, p: SettingsPatch) {
     }
     if let Some(v) = p.status_icon {
         cfg.status_icon = v;
+    }
+    if let Some(v) = p.tray_shape {
+        cfg.tray_shape = v;
     }
     // After the assignments, so an out-of-range `notify_volume` from this payload is clamped
     // rather than persisted as-is.
@@ -608,7 +614,8 @@ pub fn import_config(app: AppHandle, path: String) -> Result<Config, String> {
         Ok(())
     })?;
     apply_dock_policy(&app, cfg.hide_dock);
-    crate::tray::set_style(&app, cfg.status_icon, cfg.tray_filled);
+    let (icon, filled) = cfg.tray_look();
+    crate::tray::set_style(&app, icon, filled);
     Ok(cfg)
 }
 
@@ -690,6 +697,39 @@ mod settings_tests {
         assert_eq!((cfg.status_icon, cfg.tray_filled), (StatusIcon::Rings, false));
         apply_settings(&mut cfg, SettingsPatch::default());
         assert_eq!((cfg.status_icon, cfg.tray_filled), (StatusIcon::Rings, false), "omitted = unchanged");
+    }
+
+    /// The menu-bar picture follows the app's status icon unless it is fixed to its own.
+    #[test]
+    fn tray_look_follows_the_status_icon_unless_fixed() {
+        use crate::models::{StatusIcon, TrayShape};
+        let mut cfg = Config::default();
+        assert_eq!(cfg.tray_shape, TrayShape::Same, "default follows the app");
+        assert_eq!(cfg.tray_look(), (StatusIcon::Pulse, true));
+        apply_settings(&mut cfg, SettingsPatch { status_icon: Some(StatusIcon::Rings), ..Default::default() });
+        assert_eq!(cfg.tray_look(), (StatusIcon::Rings, true), "same: the menu bar changes with the app");
+        apply_settings(&mut cfg, SettingsPatch { tray_shape: Some(TrayShape::Pulse), ..Default::default() });
+        assert_eq!(cfg.tray_look(), (StatusIcon::Pulse, true), "fixed: the app's icon no longer matters");
+        apply_settings(&mut cfg, SettingsPatch { status_icon: Some(StatusIcon::Pulse), tray_shape: Some(TrayShape::Rings), tray_filled: Some(false), ..Default::default() });
+        assert_eq!((cfg.status_icon, cfg.tray_look()), (StatusIcon::Pulse, (StatusIcon::Rings, false)), "orb and menu bar differ");
+        apply_settings(&mut cfg, SettingsPatch::default());
+        assert_eq!(cfg.tray_shape, TrayShape::Rings, "omitted = unchanged");
+    }
+
+    /// `tray_shape` travels as a lowercase word; a config from before it existed follows the app.
+    #[test]
+    fn tray_shape_wire_format_and_old_configs() {
+        use crate::models::TrayShape;
+        for (wire, shape) in [("same", TrayShape::Same), ("rings", TrayShape::Rings), ("pulse", TrayShape::Pulse)] {
+            let p: SettingsPatch = serde_json::from_str(&format!(r#"{{"tray_shape":"{wire}"}}"#)).unwrap();
+            assert_eq!(p.tray_shape, Some(shape));
+            assert_eq!(serde_json::to_value(shape).unwrap(), wire);
+        }
+        assert!(serde_json::from_str::<SettingsPatch>(r#"{"tray_shape":"nope"}"#).is_err());
+        let mut json = serde_json::to_value(Config::default()).unwrap();
+        json.as_object_mut().unwrap().remove("tray_shape");
+        let old: Config = serde_json::from_value(json).unwrap();
+        assert_eq!(old.tray_shape, TrayShape::Same);
     }
 
     /// The frontend sends the icon as a lowercase word; a config file from before the settings

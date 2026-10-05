@@ -27,18 +27,33 @@ const RINGS_ALARM = (
     <circle className="rg" cx="12" cy="12" r="10.6" opacity="0.18" strokeDasharray="3.4 2.8" />
   </>
 );
-// Offline: Wi-Fi off, the same in every style. Its arcs span the rings' 21-unit width as a 90° wedge
-// over one focal point, dashed like Alarm's; the slash is Offline's mark.
-const WIFI_OFF = (
+// Offline: a bold Wi-Fi whose first dot is the dot of a "!", the same in every style. The three arcs
+// (they span the rings' 21-unit width as a 90° wedge over one focal point) switch on one after
+// another, hold, then all go dark (`.sq1`–`.sq3`, see App.css); the "!" and its dot stay still. The
+// "!" casts a soft shadow: a blurred, doubled strip cut out of the arcs, so they fade out around it
+// instead of ending in a hard edge.
+const wifiOff = (gid: string) => (
   <>
-    <path className="rg" d="M7.76 15.26A6 6 0 0 1 16.24 15.26" opacity="1" strokeDasharray="2.2 1.8" />
-    <path className="rg" d="M4.58 12.08A10.5 10.5 0 0 1 19.42 12.08" opacity="0.75" strokeDasharray="2.8 2.2" />
-    <path className="rg" d="M1.39 8.89A15 15 0 0 1 22.61 8.89" opacity="0.5" strokeDasharray="3.4 2.6" />
-    <path pathLength={1} d="M12 19.5h.01" strokeWidth="2.4" />
-    <path className="orb-slash" pathLength={1} d="M4.5 4.5l15 15" strokeWidth="2.2" />
+    <defs>
+      <filter id={`${gid}-sf`} filterUnits="userSpaceOnUse" x="-6" y="-6" width="36" height="36">
+        <feGaussianBlur stdDeviation="1.9" />
+      </filter>
+      <mask id={`${gid}-cut`} maskUnits="userSpaceOnUse" x="-4" y="-4" width="32" height="32">
+        <rect x="-4" y="-4" width="32" height="32" fill="#fff" stroke="none" />
+        <path d="M12 4.4V12" stroke="#000" strokeWidth="7.4" filter={`url(#${gid}-sf)`} />
+        <path d="M12 4.4V12" stroke="#000" strokeWidth="5.7" filter={`url(#${gid}-sf)`} />
+      </mask>
+    </defs>
+    <g mask={`url(#${gid}-cut)`} strokeWidth="2.4">
+      <path className="sq1" d="M7.76 15.26A6 6 0 0 1 16.24 15.26" />
+      <path className="sq2" d="M4.58 12.08A10.5 10.5 0 0 1 19.42 12.08" />
+      <path className="sq3" d="M1.39 8.89A15 15 0 0 1 22.61 8.89" />
+    </g>
+    <path d="M12 4.4V11.8" strokeWidth="2.6" />
+    <path d="M12 19.5h.01" strokeWidth="3.6" />
   </>
 );
-const RINGS: Record<Mood, React.ReactNode> = {
+const RINGS: Record<Exclude<Mood, "offline">, React.ReactNode> = {
   ok: RINGS_OK,
   busy: RINGS_OK,
   idle: RINGS_OK,
@@ -51,7 +66,6 @@ const RINGS: Record<Mood, React.ReactNode> = {
     </>
   ),
   alarm: RINGS_ALARM,
-  offline: WIFI_OFF,
 };
 
 // ---------- Pulse: a canary heartbeat ----------
@@ -100,7 +114,7 @@ const TAIL = [
 const DELAY = 0.05; // seconds between one dot and the next
 
 /** The end-fade gradient, and — for a heartbeat that glides — the glow's gradient and line mask. */
-const pulseDefs = (gid: string, line?: string) => (
+const pulseDefs = (gid: string, line?: string, extra?: React.ReactNode) => (
   <defs>
     {/* Clear at both ends, solid in the middle. */}
     <linearGradient id={`${gid}-fade`} gradientUnits="userSpaceOnUse" x1={X0} y1="0" x2={X1} y2="0">
@@ -132,6 +146,7 @@ const pulseDefs = (gid: string, line?: string) => (
         </mask>
       </>
     )}
+    {extra}
   </defs>
 );
 
@@ -214,13 +229,28 @@ const PULSE: Record<Mood, PulseNode> = {
   // the flat line, and the X appears for the rest of the loop. With reduced motion only the end of it stays: the line and the X.
   alarm: (gid) => (
     <>
-      {pulseDefs(gid)}
+      {pulseDefs(
+        gid,
+        undefined,
+        <>
+          {/* The X casts a soft shadow: a blurred, doubled ellipse cut out of the dashed line, so
+              the line fades out around the X instead of running into it. */}
+          <filter id={`${gid}-xf`} filterUnits="userSpaceOnUse" x="-4" y="-4" width="32" height="32">
+            <feGaussianBlur stdDeviation="1.5" />
+          </filter>
+          <mask id={`${gid}-xm`} maskUnits="userSpaceOnUse" x="-4" y="-4" width="32" height="32">
+            <rect x="-4" y="-4" width="32" height="32" fill="#fff" />
+            <ellipse cx="12" cy="12" rx="8.6" ry="5.6" fill="#000" filter={`url(#${gid}-xf)`} />
+            <ellipse cx="12" cy="12" rx="8.6" ry="5.6" fill="#000" filter={`url(#${gid}-xf)`} />
+          </mask>
+        </>,
+      )}
       <path className="pulse-beat" pathLength={1} d={toPath(BEAT_OK)} stroke={`url(#${gid}-fade)`} />
-      <path className="pulse-flat" d={FLAT_LINE} stroke={`url(#${gid}-fade)`} />
+      <path className="pulse-flat" d={FLAT_LINE} stroke={`url(#${gid}-fade)`} mask={`url(#${gid}-xm)`} />
       <path className="pulse-x" pathLength={1} d="M9 8l6 8M15 8l-6 8" />
     </>
   ),
-  offline: () => WIFI_OFF,
+  offline: wifiOff,
 };
 
 export const ORB_ICON: Record<StatusIcon, Record<Mood, PulseNode>> = {
@@ -231,18 +261,18 @@ export const ORB_ICON: Record<StatusIcon, Record<Mood, PulseNode>> = {
     idle: () => RINGS.idle,
     warn: () => RINGS.warn,
     alarm: () => RINGS.alarm,
-    offline: () => RINGS.offline,
+    offline: wifiOff,
   },
   pulse: PULSE,
 };
 
 /** The orb's hover refresh arrow, drawn in the orb icons' own frame and stroke so it reads as one
- *  of them: an arc the size of the middle ring with an open arrowhead at its end. */
+ *  of them: an arc the size of the middle ring that runs into an open arrowhead pointing along it. */
 export function OrbRefresh() {
   return (
     <svg className="orb-refresh-icon" viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M19.5 12A7.5 7.5 0 1 1 17.3 6.7" />
-      <path d="M14.3 6.7H17.3V3.7" />
+      <path d="M19.39 13.3A7.5 7.5 0 1 1 17.3 6.7L18.36 7.76" />
+      <path d="M18.36 4.76L18.36 7.76L15.36 7.76" />
     </svg>
   );
 }
@@ -261,7 +291,7 @@ export function OrbIcon({
   const animate = !window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
   return (
     <svg
-      className={`orb-icon orb-icon-${style} ${className}`.trim()}
+      className={`orb-icon orb-icon-${style}${mood === "offline" ? " off-wifi" : ""} ${className}`.trim()}
       data-mood={mood}
       viewBox="0 0 24 24"
       aria-hidden="true"
@@ -274,7 +304,7 @@ export function OrbIcon({
 /** A small live sample of a style (calm mood) for the Settings picker. */
 export function OrbThumb({ style }: { style: StatusIcon }) {
   return (
-    <span className="orb-thumb" aria-hidden="true">
+    <span className="orb-thumb" data-icon={style} aria-hidden="true">
       <OrbIcon style={style} mood="ok" />
     </span>
   );

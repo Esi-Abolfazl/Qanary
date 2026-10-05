@@ -186,6 +186,10 @@ pub struct Config {
     /// bare. Additive — older configs load as filled (`true`).
     #[serde(default = "default_tray_filled")]
     pub tray_filled: bool,
+    /// Which picture the menu-bar icon draws: its own, or the in-app status icon's (ADR-0048).
+    /// Additive — older configs load as `Same`, which is what they did before.
+    #[serde(default)]
+    pub tray_shape: TrayShape,
     /// Last app version we showed the "What's new" changelog for. On startup, if the
     /// running version differs, we show that version's CHANGELOG section once and update
     /// this. None = fresh install (we record the version but don't show notes).
@@ -290,6 +294,7 @@ impl Default for Config {
             hide_dock: false,
             status_icon: StatusIcon::default(),
             tray_filled: default_tray_filled(),
+            tray_shape: TrayShape::default(),
             last_changelog_version: None,
         }
     }
@@ -373,6 +378,31 @@ pub enum StatusIcon {
     /// A canary heartbeat. The default.
     #[default]
     Pulse,
+}
+
+/// Which picture the menu-bar icon draws. `Same` follows the in-app `status_icon`, so one choice
+/// changes both; `Rings` / `Pulse` fix the menu bar's picture whatever the orb shows.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum TrayShape {
+    /// Follow the in-app status icon. The default.
+    #[default]
+    Same,
+    Rings,
+    Pulse,
+}
+
+impl Config {
+    /// The menu-bar icon to draw: its picture (its own, or the status icon's) and whether it is
+    /// cut out of a filled square.
+    pub fn tray_look(&self) -> (StatusIcon, bool) {
+        let icon = match self.tray_shape {
+            TrayShape::Same => self.status_icon,
+            TrayShape::Rings => StatusIcon::Rings,
+            TrayShape::Pulse => StatusIcon::Pulse,
+        };
+        (icon, self.tray_filled)
+    }
 }
 
 /// Overall traffic-light severity.
