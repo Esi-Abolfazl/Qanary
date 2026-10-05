@@ -41,7 +41,8 @@ pnpm dev                       # then http://localhost:1420/?mock (or ?mock=ok, 
   system Chrome (`channel: "chrome"` — no `playwright install`). The Tauri IPC bridge is the app's
   own dev mock (`src/dev/mockTauri.ts`, ADR-0042): fixtures open `/?mock` and hand it data as
   `window.__MOCK__`. Covers: initial render, refresh,
-  add-list, settings, Config card, a list reorder surviving the next `service-update`, list columns across window widths.
+  add-list, settings, Config card, a list reorder surviving the next `service-update`, list columns across window widths,
+  the hero and cards on shared lines, control and card radii, the ☰ drawer, and the orb's motion.
   Native WKWebView (the actual app) still can't be WebDriver-driven on macOS — e2e targets the
   web frontend served by Vite, not the bundled native binary.
 - **Self-verify before declaring done.** After touching frontend code, run `pnpm test:ui`
@@ -58,7 +59,7 @@ pnpm dev                       # then http://localhost:1420/?mock (or ?mock=ok, 
 - User new to Rust → keep backend small + heavily commented.
 - Frontend subscribes to the `status-update` (full snapshot) and `service-update` (per-Service
   delta) Tauri events (no polling), plus `menu-action` from the macOS app menu (ADR-0045).
-- Backend owns all probe/rollup/persistence logic; tray (later) reuses same snapshot.
+- Backend owns all probe/rollup/persistence logic; the tray reuses the same snapshot.
 
 ## Every reply: scannable, ends with a status footer
 
@@ -87,7 +88,7 @@ always in this order:
 - Location: `docs/adr/` (in the project root, checked into git).
 - Template: `docs/adr/_TEMPLATE.md`.
 - Numbering: 4-digit zero-padded, continuing from highest existing file.
-- Current highest: 0048 (a TCP-only endpoint never keeps a list up).
+- Current highest: the largest number in `docs/adr/`; open PRs may already hold the next ones, so check them before picking a number.
 
 ## TODO
 
