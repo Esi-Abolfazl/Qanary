@@ -13,7 +13,8 @@ Full v1 design: `.claude/plans/qanary-v1.md` (local only: `.claude/` is gitignor
 ## Stack
 
 - **Tauri v2** (Rust backend) + **React + Vite + TypeScript** frontend.
-- Probe = TCP connect + HTTPS HEAD (classify Up / Blocked / Down).
+- Probe = TCP connect + HTTPS HEAD (classify Up / Blocked / Down), plus an opt-in GET that reads a
+  Cloudflare/Akamai block page once per IP (ADR-0051).
 - Storage: JSON in app config dir (`~/Library/Application Support/Qanary/config.json` on mac).
 - mac first; Windows/Linux + tray/widget later (same codebase).
 
