@@ -186,7 +186,7 @@ pub struct Config {
     /// bare. Additive — older configs load as filled (`true`).
     #[serde(default = "default_tray_filled")]
     pub tray_filled: bool,
-    /// Which picture the menu-bar icon draws: its own, or the in-app status icon's (ADR-0048).
+    /// Which picture the menu-bar icon draws: its own, or the in-app status icon's (ADR-0044).
     /// Additive — older configs load as `Same`, which is what they did before.
     #[serde(default)]
     pub tray_shape: TrayShape,

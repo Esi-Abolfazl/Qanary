@@ -91,6 +91,7 @@ always in this order:
 - Template: `docs/adr/_TEMPLATE.md`.
 - Numbering: 4-digit zero-padded, continuing from highest existing file.
 - Current highest: the largest number in `docs/adr/`; open PRs may already hold the next ones, so check them before picking a number.
+- A change that refines an existing decision amends that ADR (mark the edit *Amended:* and extend its Status line); a new ADR only for a decision no ADR covers yet.
 
 ## TODO
 
