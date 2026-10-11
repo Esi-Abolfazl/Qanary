@@ -182,6 +182,11 @@ body {
 
 /* ☰ top right; it opens a glass drawer to its left with Add list, Edit order and Settings
    (HeroMenu.tsx). */
+/* The ☰ and its drawer take the orb's shape: a rounded square beside the Pulse orb, a circle (and
+   a pill when it opens) beside the Rings orb, as before the shared control corners. */
+.hero { --r-hero: var(--r-control); }
+.hero[data-icon="rings"] { --r-hero: calc(var(--hero-btn) / 2); }
+
 .hero-btn {
   position: relative;
   z-index: 1; /* above the drawer, which grows out from under it */
@@ -190,7 +195,7 @@ body {
   width: var(--hero-btn);
   height: var(--hero-btn);
   padding: 0;
-  border-radius: var(--r-control);
+  border-radius: var(--r-hero);
   border: 1px solid var(--btn-border);
   background: var(--btn-bg);
   box-shadow: var(--btn-shadow);
@@ -237,7 +242,7 @@ body {
   position: absolute;
   inset: 2px;
   z-index: -1;
-  border-radius: var(--r-control-sm);
+  border-radius: calc(var(--r-hero) - 2px); /* concentric with the cell, inset 2px */
   background: transparent;
   transition: background 0.2s;
 }
@@ -302,7 +307,7 @@ body {
   width: 100%;
   box-sizing: border-box; /* the border is inside the width, so both ends are the same distance away */
   z-index: -1;
-  border-radius: var(--r-control);
+  border-radius: var(--r-hero);
   border: 1px solid var(--btn-border);
   background: var(--btn-bg);
   box-shadow: var(--btn-shadow);
@@ -345,7 +350,7 @@ body {
   height: var(--hero-btn);
   padding: 0;
   border: 0;
-  border-radius: var(--r-control);
+  border-radius: var(--r-hero);
   background: transparent;
   color: var(--text-muted);
   cursor: pointer;
@@ -995,6 +1000,38 @@ body {
 .status-orb:active:not(:disabled) .orb-refresh svg {
   transform: scale(0.88) rotate(25deg);
   transition-duration: 0.12s;
+}
+/* Pulse: a square arrow mustn't spin (a tilted square reads as crooked, like the orb's shake).
+   Instead it slides clockwise round its rounded-square track: the line is one dash on it
+   (pathLength 100: line 82.6, gap 17.4 over the top-right corner), the head rides the same track
+   and turns with it. It starts a third of a lap back, the circle's -120deg; transitions, so leaving
+   mid-way slides it back from where it is. */
+.status-orb[data-icon="pulse"] .orb-refresh svg {
+  transform: scale(0.94);
+  transition: transform 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.orb-refresh-line {
+  stroke-dasharray: 82.6 17.4;
+  stroke-dashoffset: 15.9;
+  transition: stroke-dashoffset 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.orb-refresh-head {
+  offset-rotate: auto;
+  offset-anchor: 0 0;
+  transform-box: view-box;
+  offset-distance: 66.7%;
+  transition: offset-distance 0.3s cubic-bezier(0.23, 1, 0.32, 1);
+}
+.status-orb:hover:not(:disabled) .orb-refresh-line,
+.status-orb:focus-visible:not(:disabled) .orb-refresh-line {
+  stroke-dashoffset: -17.4;
+}
+.status-orb:hover:not(:disabled) .orb-refresh-head,
+.status-orb:focus-visible:not(:disabled) .orb-refresh-head {
+  offset-distance: 100%;
+}
+.status-orb[data-icon="pulse"]:active:not(:disabled) .orb-refresh svg {
+  transform: scale(0.88);
 }
 
 /* Busy: yellow orb, rings pulse in a wave, ripples keep going. */

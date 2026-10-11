@@ -116,7 +116,7 @@ function StatusOrb({
       >
         <OrbIcon key={`${icon}-${mood}`} style={icon} mood={mood} />
         <span className="orb-refresh" aria-hidden="true">
-          <OrbRefresh />
+          <OrbRefresh style={icon} />
         </span>
       </button>
     </div>
@@ -156,7 +156,7 @@ export function StatusHero({
   const heroRef = useRef<HTMLElement>(null);
 
   return (
-    <header ref={heroRef} className={`hero hero-${mood}`}>
+    <header ref={heroRef} className={`hero hero-${mood}`} data-icon={icon}>
       <div className="hero-bar">
         <div className="hero-brand">
           <span className="logo-mark">
