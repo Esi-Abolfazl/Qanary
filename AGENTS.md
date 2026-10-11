@@ -45,6 +45,8 @@ pnpm dev                       # then http://localhost:1420/?mock (or ?mock=ok, 
   the hero and cards on shared lines, control and card radii, the ☰ drawer, and the orb's motion.
   Native WKWebView (the actual app) still can't be WebDriver-driven on macOS — e2e targets the
   web frontend served by Vite, not the bundled native binary.
+- **CI** (`.github/workflows/verify.yml`): `pnpm check`, `test:ui` and `test:rust` on every PR and push to
+  `main`; `release.yml` calls it before a build. e2e is not in CI (ADR-0013).
 - **Self-verify before declaring done.** After touching frontend code, run `pnpm test:ui`
   (logic + component) and, for interaction/UI changes, `pnpm test:e2e`. These replace driving
   the native app — use them instead of asking the user to test. Add/extend specs for new logic.

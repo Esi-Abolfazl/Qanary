@@ -1,6 +1,6 @@
 # 0013. Frontend test harness — vitest + jsdom + Playwright/mockIPC, local-only
 
-- **Status:** accepted
+- **Status:** accepted (amended: CI runs the unit suites)
 - **Date:** 2026-06-25
 - **Deciders:** Esi-Abolfazl
 
@@ -39,6 +39,9 @@ wrapper layer (the actual `invoke` calls) rather than replacing it at the module
 Command invocations are recorded in `window.__INVOKED_CMDS__` for assertions.
 
 **Local-only:** No CI workflow is added. Both test layers run on developer/Claude machines.
+*Amended:* `.github/workflows/verify.yml` now runs `pnpm check`, `test:ui` and `test:rust` on
+every pull request and push to `main`, and `release.yml` calls the same workflow before a build.
+e2e stays local (it drives a system Chrome).
 
 **Live event emit:** The `status-update` event channel is not exercised in e2e (emitting
 a Tauri event back through mockIPC requires holding a listener id that crosses the
