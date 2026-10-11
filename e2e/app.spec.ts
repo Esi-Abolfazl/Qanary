@@ -17,9 +17,10 @@
  *  10. Long names never push a row past its card: the row buttons stay inside it
  *  11. Lists stack in a narrow window, sit side by side in a wide one, and a full-screen window
  *      centers them at 480px each instead of stretching
- *  8d. Controls share one family: 32px / 12px (28px / 10px small), cards and dialogs 16px
+ *  8d. Controls share one family: 32px / 12px (28px / 10px small), cards and dialogs 16px; the ☰ is round beside Rings
  *  8e. The open ☰ drawer is the ☰'s own shape stretched: every cell 32px, no uneven gap at either end
  *  8f. The Pulse orb's ripples are outlines that keep its corners; its shake never tilts it
+ *  8g. The Pulse orb's refresh arrow slides round its rounded square on hover instead of spinning
  *  12. The Pulse alarm shows its dead line on arrival, dashed and crawling, and its X beats (the orb's
  *      draw-in must not override them)
  *  13. The ☰ drawer grows out to the ☰'s left (the ☰ turning into a ›), names an action on hover,
@@ -270,10 +271,16 @@ test("8d — controls share one size and corner family; cards and dialogs have t
       const c = getComputedStyle(el);
       return { h: el.getBoundingClientRect().height, r: c.borderTopLeftRadius };
     });
-  // The ☰, the IP chip and a list's name chip: one 32px control with 12px corners.
-  for (const sel of ['button[aria-label="Menu"]', ".wan", ".list-name"]) {
+  // The IP chip and a list's name chip: one 32px control with 12px corners.
+  for (const sel of [".wan", ".list-name"]) {
     expect(await look(sel), sel).toEqual({ h: 32, r: "12px" });
   }
+  // The ☰ takes the orb's shape: a circle beside the Rings orb (this fixture), a 12px rounded square beside Pulse.
+  const menuBtn = 'button[aria-label="Menu"]';
+  expect(await look(menuBtn)).toEqual({ h: 32, r: "16px" });
+  await page.locator(".hero").evaluate((h) => h.setAttribute("data-icon", "pulse"));
+  expect(await look(menuBtn)).toEqual({ h: 32, r: "12px" });
+  await page.locator(".hero").evaluate((h) => h.setAttribute("data-icon", "rings"));
   // A small button (the ⋯ and + in a list header): 28px with 10px corners.
   expect(await look(".list-head .list-menu-btn")).toEqual({ h: 28, r: "10px" });
   // A list card: 16px.
@@ -406,7 +413,32 @@ test("8c — the orb's refresh arrow is drawn in the orb icons' frame, a little 
   await expect(page.locator(".orb-refresh svg")).toHaveCSS("opacity", "0.85");
 });
 
-test("9 — a service being re-checked shows Pinging… and then its result", async ({
+test("8g — the Pulse orb's refresh arrow slides round its rounded square instead of spinning", async ({
+  mockedPage: page,
+}) => {
+  await page.addInitScript(() => {
+    const w = window as unknown as { __MOCK__: { cfg: object } };
+    w.__MOCK__.cfg = { ...w.__MOCK__.cfg, status_icon: "pulse" };
+  });
+  await page.reload();
+  await page.waitForSelector('[aria-label="Refresh"]:not([disabled])');
+  const svg = page.locator(".orb-refresh svg.orb-refresh-track");
+  const line = svg.locator(".orb-refresh-line");
+  const head = svg.locator(".orb-refresh-head");
+  // At rest it waits a third of a lap back, small, and never rotated.
+  await expect(svg).toHaveCSS("transform", "matrix(0.94, 0, 0, 0.94, 0, 0)");
+  await expect(line).toHaveCSS("stroke-dashoffset", "15.9px");
+  await expect(head).toHaveCSS("offset-distance", "66.7%");
+  // Hovered, line and head land together: the line ends where the head sits, gap over the top-right corner.
+  await page.locator(".status-orb").hover();
+  await expect(line).toHaveCSS("stroke-dashoffset", "-17.4px");
+  await expect(head).toHaveCSS("offset-distance", "100%");
+  await expect(svg).toHaveCSS("transform", "none");
+  // Same transparency as the circle arrow.
+  await expect(svg).toHaveCSS("opacity", "0.85");
+});
+
+test("9 —a service being re-checked shows Pinging… and then its result", async ({
   mockedPage: page,
   emitEvent,
 }) => {

@@ -266,9 +266,24 @@ export const ORB_ICON: Record<StatusIcon, Record<Mood, PulseNode>> = {
   pulse: PULSE,
 };
 
+/** The Pulse orb's rounded square as a closed track, starting where the top edge meets the top-right
+ *  corner and running clockwise. The refresh arrow's line is one dash on it; its head rides it. */
+const REFRESH_TRACK =
+  "M14.7 5A4.3 4.3 0 0 1 19 9.3V14.7A4.3 4.3 0 0 1 14.7 19H9.3A4.3 4.3 0 0 1 5 14.7V9.3A4.3 4.3 0 0 1 9.3 5Z";
+
 /** The orb's hover refresh arrow, drawn in the orb icons' own frame and stroke so it reads as one
- *  of them: an arc the size of the middle ring that runs into an open arrowhead pointing along it. */
-export function OrbRefresh() {
+ *  of them. Rings: an arc the size of the middle ring that runs into an open arrowhead pointing
+ *  along it. Pulse: the same arrow round the orb's own rounded square; on hover it slides clockwise
+ *  along that track into place (App.css), where a circle arrow would spin. */
+export function OrbRefresh({ style }: { style: StatusIcon }) {
+  if (style === "pulse") {
+    return (
+      <svg className="orb-refresh-icon orb-refresh-track" viewBox="0 0 24 24" aria-hidden="true">
+        <path className="orb-refresh-line" pathLength={100} d={REFRESH_TRACK} />
+        <path className="orb-refresh-head" d="M-2.1 -2.1L0 0L-2.1 2.1" style={{ offsetPath: `path("${REFRESH_TRACK}")` }} />
+      </svg>
+    );
+  }
   return (
     <svg className="orb-refresh-icon" viewBox="0 0 24 24" aria-hidden="true">
       <path d="M19.39 13.3A7.5 7.5 0 1 1 17.3 6.7L18.36 7.76" />
