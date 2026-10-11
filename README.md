@@ -26,10 +26,14 @@ Seeded defaults: **Global** list is critical (red alarm), **Iran** list is non-c
 - **Configurable probe intervals** — critical lists refresh every 30s and non-critical lists every 60s by default (minimum 10s); both adjustable in **Settings**. Each service probes independently, so dots update one by one as their results land.
 - **Drag-and-drop reordering** — rearrange lists, the services within them, and the IP provider by dragging.
 - Add your own services and lists. Config persisted as local JSON.
-- Lives in the **system tray** with a dynamic icon that mirrors current status (green / orange / red).
+- A **status orb** at the top shows the overall state. Pick **Rings** or **Pulse** for it in **Settings**.
+- Lives in the **menu bar** with an icon that shows the current status. It follows the orb's style or keeps its own, outline or filled, and its menu shows how each list is doing.
+- **Check one thing now**: click a service or a list name to re-check just that one.
+- Lists sit **side by side** when the window is wide enough.
+- **Mac shortcuts**: ⌘N new list, ⇧⌘O edit order, ⌘, Settings, ⌘R refresh.
 - Native **desktop notifications** on critical-list status transitions — fully down, recovery, fully blocked, and total loss of connectivity (with optional sound, at your chosen volume). One alert per check round, at the worst thing found.
 - **Launch at login** and **Hide the Dock icon** (macOS) for menu-bar-only operation — both in **Settings**.
-- **Dark / light theme** following the system, with a manual override in the menu.
+- **Dark / light theme** following the system, with a manual override in **Settings**.
 
 ## Lists
 
@@ -83,8 +87,11 @@ source "$HOME/.cargo/env"   # until login shell picks up cargo
 pnpm install                 # frontend deps
 pnpm run tauri dev           # run app (dev)
 pnpm run tauri build         # release bundle
-cd src-tauri && cargo test   # Rust unit tests
+pnpm test                    # frontend (vitest) + Rust (cargo) tests
+pnpm test:e2e                # Playwright end-to-end tests (needs Chrome)
 ```
+
+`pnpm dev` and then `http://localhost:1420/?mock` runs the interface in a browser on sample data, without the Rust backend. The README screenshots come from that page.
 
 Requires Node, Rust (rustup), and Xcode CLT on mac.
 
