@@ -2937,7 +2937,7 @@ dependencies = [
 
 [[package]]
 name = "qanary"
-version = "1.0.0"
+version = "1.0.2"
 dependencies = [
  "core-foundation 0.9.4",
  "futures-util",

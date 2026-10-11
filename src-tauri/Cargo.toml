@@ -1,6 +1,6 @@
 [package]
 name = "qanary"
-version = "1.0.0"
+version = "1.0.2"
 description = "Qanary — connectivity monitor"
 authors = ["you"]
 edition = "2021"

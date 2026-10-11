@@ -8,6 +8,27 @@ heading) become that release's notes. Dev-log-only subsections (`## Internal`, `
 `## Development`, `## Chore`, `## CI`, `## Build`, `## More info`) appear on the GitHub
 release page but are hidden from the in-app "What's new" modal.
 
+## [1.0.2]
+
+## What's new
+
+- Choose a different icon for the menu bar than in the app: Same as app, Pulse or Rings, in Settings.
+- The filled menu bar look has its own switch.
+- Click "?" next to Status icon to see every state before you pick.
+- UI polish for the status icons, the Offline icon and the ☰ button.
+
+## Fix
+
+- Screen readers now describe the menu bar picker correctly.
+
+## More info
+
+- [ADR 0044: the status icon setting](https://github.com/Esi-Abolfazl/Qanary/blob/main/docs/adr/0044-one-status-icon-setting-for-orb-and-menu-bar.md), updated for the separate menu bar icon. ADR 0043 covers the new Offline icon.
+
+## Internal
+
+- GitHub now runs the type check and the unit tests on every pull request.
+
 ## [1.0.0]
 
 ## What's new
