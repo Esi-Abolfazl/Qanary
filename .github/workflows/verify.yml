@@ -1,0 +1,35 @@
+name: Verify
+
+# The one definition of "the suites pass": every pull request and push to main runs it, and the
+# release workflow calls it before building. macOS: cargo test needs no extra system packages there
+# (Ubuntu needs webkit2gtk from apt). e2e stays local: it drives a system Chrome.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_call:
+
+jobs:
+  verify:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      # No version input: the action reads `packageManager` from package.json, the one pin.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 'lts/*'
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test:ui
+      - run: pnpm test:rust

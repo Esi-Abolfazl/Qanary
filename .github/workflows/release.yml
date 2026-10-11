@@ -6,11 +6,12 @@ on:
       - 'v*'
 
 jobs:
-  # Nothing is released that fails the suites or whose version files disagree with the tag.
-  # macOS: cargo test needs no extra system packages there (Ubuntu needs webkit2gtk from apt).
-  # e2e stays local — it drives a system Chrome.
+  # Nothing is released that fails the suites (verify.yml) or whose version files disagree with the tag.
   verify:
-    runs-on: macos-latest
+    uses: ./.github/workflows/verify.yml
+
+  versions:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
 
@@ -23,27 +24,8 @@ jobs:
           echo "tag=$VER package.json=$PKG tauri.conf.json=$CONF Cargo.toml=$CARGO"
           [ "$PKG" = "$VER" ] && [ "$CONF" = "$VER" ] && [ "$CARGO" = "$VER" ]
 
-      # No version input: the action reads `packageManager` from package.json, the one pin.
-      - uses: pnpm/action-setup@v6
-
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 'lts/*'
-          cache: pnpm
-
-      - uses: dtolnay/rust-toolchain@stable
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: src-tauri
-
-      - run: pnpm install --frozen-lockfile
-      - run: pnpm check
-      - run: pnpm test:ui
-      - run: pnpm test:rust
-
   create-release:
-    needs: verify
+    needs: [verify, versions]
     permissions:
       contents: write
     runs-on: ubuntu-latest
