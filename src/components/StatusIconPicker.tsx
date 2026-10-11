@@ -41,7 +41,7 @@ function Strip({ icon, filled, size }: { icon: StatusIcon; filled: boolean; size
 /**
  * Settings → Appearance: the status icon (the in-app orb), a "?" that shows what each state looks
  * like, and the menu-bar icon: a dropdown for its picture ("Same as app" follows the orb, or Pulse /
- * Rings whatever the orb shows) and a "Filled" switch for the filled-square look (ADR-0049).
+ * Rings whatever the orb shows) and a "Filled" switch for the filled-square look (ADR-0044).
  */
 export function StatusIconPicker({
   statusIcon,
@@ -150,7 +150,6 @@ export function StatusIconPicker({
             ref={triggerRef}
             type="button"
             className="tray-dd"
-            aria-haspopup="listbox"
             aria-expanded={menuOpen}
             aria-labelledby={`${uid}-tray`}
             aria-describedby={`${uid}-cur`}
@@ -165,13 +164,12 @@ export function StatusIconPicker({
             {selected.title}
           </span>
           {menuOpen && (
-            <div className="tray-menu" role="listbox" aria-labelledby={`${uid}-tray`}>
+            <div className="tray-menu" role="group" aria-labelledby={`${uid}-tray`}>
               {CHOICES.map((c) => (
                 <button
                   key={c.shape}
                   type="button"
-                  role="option"
-                  aria-selected={c.shape === trayShape}
+                  aria-pressed={c.shape === trayShape}
                   className="tray-opt"
                   title={c.hint}
                   onClick={() => {

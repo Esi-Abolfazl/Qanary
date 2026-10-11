@@ -710,7 +710,7 @@ describe("App", () => {
       const filledBtn = screen.getByRole("checkbox", { name: "Filled menubar icons" });
       const openMenu = async () => {
         await user.click(trigger);
-        return within(screen.getByRole("listbox", { name: "Menu bar" }));
+        return within(screen.getByRole("group", { name: "Menu bar" }));
       };
       return { user, trigger, filledBtn, openMenu };
     }
@@ -724,25 +724,25 @@ describe("App", () => {
     it("is a dropdown of three pictures plus a Filled switch, the saved look shown", async () => {
       const { trigger, filledBtn, openMenu } = await openSettings();
       // Closed: the five states of the effective look (the app's Rings, not filled).
-      expect(screen.queryByRole("listbox")).toBeNull();
+      expect(screen.queryByRole("group", { name: "Menu bar" })).toBeNull();
       expect(looksOf(trigger)).toEqual(new Set(["rings/false"]));
       expect(trigger.querySelectorAll("svg.tray-icon")).toHaveLength(5);
       expect(filledBtn).not.toBeChecked();
 
       const menu = await openMenu();
-      expect(menu.getAllByRole("option").map((o) => o.querySelector("b")?.textContent)).toEqual([
+      expect(menu.getAllByRole("button").map((o) => o.querySelector("b")?.textContent)).toEqual([
         "Same as app",
         "Pulse",
         "Rings",
       ]);
-      expect(menu.getByRole("option", { name: /^Same as app/ })).toHaveAttribute("aria-selected", "true");
+      expect(menu.getByRole("button", { name: /^Same as app/ })).toHaveAttribute("aria-pressed", "true");
     });
 
     it("Escape closes the menu without choosing", async () => {
       const { user, openMenu } = await openSettings();
       await openMenu();
       await user.keyboard("{Escape}");
-      expect(screen.queryByRole("listbox")).toBeNull();
+      expect(screen.queryByRole("group", { name: "Menu bar" })).toBeNull();
     });
 
     it("'Same as app' follows the status icon; Pulse and Rings keep their own picture", async () => {
@@ -751,9 +751,9 @@ describe("App", () => {
       await user.click(icons.getByRole("radio", { name: /pulse/i }));
 
       const menu = await openMenu();
-      expect(looksOf(menu.getByRole("option", { name: /^Same as app/ }))).toEqual(new Set(["pulse/false"]));
-      expect(looksOf(menu.getByRole("option", { name: /^Pulse/ }))).toEqual(new Set(["pulse/false"]));
-      expect(looksOf(menu.getByRole("option", { name: /^Rings/ }))).toEqual(new Set(["rings/false"]));
+      expect(looksOf(menu.getByRole("button", { name: /^Same as app/ }))).toEqual(new Set(["pulse/false"]));
+      expect(looksOf(menu.getByRole("button", { name: /^Pulse/ }))).toEqual(new Set(["pulse/false"]));
+      expect(looksOf(menu.getByRole("button", { name: /^Rings/ }))).toEqual(new Set(["rings/false"]));
     });
 
     it("the Filled switch flips every look, in the box and in the menu", async () => {
@@ -762,7 +762,7 @@ describe("App", () => {
       expect(filledBtn).toBeChecked();
       expect(looksOf(trigger)).toEqual(new Set(["rings/true"]));
       const menu = await openMenu();
-      expect(looksOf(menu.getByRole("option", { name: /^Pulse/ }))).toEqual(new Set(["pulse/true"]));
+      expect(looksOf(menu.getByRole("button", { name: /^Pulse/ }))).toEqual(new Set(["pulse/true"]));
       await user.keyboard("{Escape}");
 
       await user.click(filledBtn);
@@ -774,8 +774,8 @@ describe("App", () => {
       vi.mocked(api.updateSettings).mockResolvedValue({ ...CONFIG, tray_shape: "pulse", tray_filled: true });
       const { user, filledBtn, openMenu } = await openSettings();
       const menu = await openMenu();
-      await user.click(menu.getByRole("option", { name: /^Pulse/ }));
-      expect(screen.queryByRole("listbox")).toBeNull();
+      await user.click(menu.getByRole("button", { name: /^Pulse/ }));
+      expect(screen.queryByRole("group", { name: "Menu bar" })).toBeNull();
       await user.click(filledBtn);
       expect(api.updateSettings).not.toHaveBeenCalled();
 
@@ -794,8 +794,8 @@ describe("App", () => {
       const { user, filledBtn, openMenu } = await openSettings();
       expect(filledBtn).toBeChecked();
       const menu = await openMenu();
-      expect(menu.getByRole("option", { name: /^Pulse/ })).toHaveAttribute("aria-selected", "true");
-      await user.click(menu.getByRole("option", { name: /^Same as app/ }));
+      expect(menu.getByRole("button", { name: /^Pulse/ })).toHaveAttribute("aria-pressed", "true");
+      await user.click(menu.getByRole("button", { name: /^Same as app/ }));
       expect(filledBtn).toBeChecked();
       await user.click(screen.getByRole("button", { name: /^save$/i }));
       await waitFor(() =>
@@ -808,7 +808,7 @@ describe("App", () => {
     it("Cancel discards a pending choice", async () => {
       const { user, filledBtn, openMenu } = await openSettings();
       const menu = await openMenu();
-      await user.click(menu.getByRole("option", { name: /^Pulse/ }));
+      await user.click(menu.getByRole("button", { name: /^Pulse/ }));
       await user.click(filledBtn);
       await user.click(screen.getByRole("button", { name: /^cancel$/i }));
       expect(api.updateSettings).not.toHaveBeenCalled();
@@ -816,8 +816,8 @@ describe("App", () => {
       await heroAction(user, /^settings$/i);
       expect(screen.getByRole("checkbox", { name: "Filled menubar icons" })).not.toBeChecked();
       await user.click(screen.getByRole("button", { name: "Menu bar" }));
-      const again = within(screen.getByRole("listbox", { name: "Menu bar" }));
-      expect(again.getByRole("option", { name: /^Same as app/ })).toHaveAttribute("aria-selected", "true");
+      const again = within(screen.getByRole("group", { name: "Menu bar" }));
+      expect(again.getByRole("button", { name: /^Same as app/ })).toHaveAttribute("aria-pressed", "true");
     });
   });
 
