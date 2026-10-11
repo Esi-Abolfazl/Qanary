@@ -1,6 +1,6 @@
 # 0043. The orb keeps the pre-Glass status colors; offline is a gray Wi-Fi off
 
-- **Status:** accepted (amends the orb colors of ADR-0032, the offline icon of ADR-0033 / ADR-0038, where ADR-0038's Pulse Alarm loop starts, and ADR-0034's tray palette and Offline picture)
+- **Status:** accepted (amends the orb colors of ADR-0032, the offline icon of ADR-0033 / ADR-0038, where ADR-0038's Pulse Alarm loop starts, and ADR-0034's tray palette and Offline picture; amended: Offline is a Wi-Fi with a "!", menu-bar rings are dotted)
 - **Date:** 2026-10-02
 - **Deciders:** Esi-Abolfazl
 
@@ -18,9 +18,17 @@ wants the orb's colors to stay what users already know.
   and busy no longer equals the brand yellow.
 - Offline, new since v0.6.5, takes the gray the redesign gave checking (`--state-checking`).
 - Every other mood keeps its rings/pulse icon and motion. Idle stays gray.
-- Offline draws one **Wi-Fi off** icon in every orb style (`WIFI_OFF` in `orbIcons.tsx`): three
-  arcs dashed like Alarm's rings, spanning the rings' width, a dot, and Offline's slash. The arcs
-  sink and the slash fades, as the offline rings did; each style keeps its own stroke weight.
+- Offline draws one icon in every style (`WIFI_OFF` in `orbIcons.tsx`). *Amended:* a bold Wi-Fi
+  whose first dot is the dot of a "!" (a slash crossed the dashes and read as noise at 18 px). On
+  the orb the three arcs switch on one after another, hold, then go dark; the "!" stays still and
+  casts a soft shadow out of the arcs. On the menu bar the same picture sits inside Pulse's frame,
+  beside Rings' outer ring, or cut out of the filled plate, with solid round-ended arcs and a
+  hard-edged gap around the "!". "!" is also Heads up's mark; the gray and the Wi-Fi tell them apart.
+- *Amended:* menu-bar Alarm and heads-up rings are **dotted**, not dashed (a dashed ring reads as a
+  ragged edge at 18 px): round-ended dashes shorter than the stroke is wide, with periods that
+  divide each circumference evenly. Pulse's Alarm dead line is four dots, two each side of the X;
+  the filled Rings Alarm keeps only the inner two rings, as holes in the plate. On the orb, a soft
+  shadow around Pulse Alarm's X fades the dashed line out near it.
 - Offline disables the orb: no network on this machine is not something a refresh can fix, and
   the scheduled checks pick the connection up on their own. Its tooltip says so.
 - Pulse Alarm's 20 s loop is entered 2.5 s in, on the dead line: arriving in Alarm (often right

@@ -63,7 +63,7 @@ Same two pictures as the orb, drawn in Rust ([`tray.rs`](../src-tauri/src/tray.r
 SVG for the picker ([`trayIcons.tsx`](../src/components/trayIcons.tsx)). The picture is **Rings**, or
 **Pulse** (a heartbeat in a rounded-square outline), drawn bare (Outline) or cut out of a colored
 plate (Filled, `tray_filled`): a circle for Rings, a rounded square for Pulse. **Settings → Appearance → Menu bar** is a dropdown of three
-pictures ([ADR-0049](adr/0049-menu-bar-icon-can-differ-from-the-orb.md)): **Same as app** (follows the
+pictures ([ADR-0044](adr/0044-one-status-icon-setting-for-orb-and-menu-bar.md)): **Same as app** (follows the
 orb's picture), **Pulse** and **Rings** (their own picture whatever the orb shows; `tray_shape`), with a
 **Filled menubar icons** switch under it that turns the filled look on or off for whichever picture is chosen. It
 shows what the orb shows, in the orb's `--mood-*` colors (a Rust test checks them against
@@ -74,7 +74,7 @@ shows what the orb shows, in the orb's `--mood-*` colors (a Rust test checks the
 | all clear | `--mood-ok` | 3 solid rings | heartbeat |
 | heads up | `--mood-warn` | 2 rings (the outer one dotted) + "!" | shallower beat |
 | alarm | `--mood-alarm` | 3 dotted rings (filled Rings: the inner 2, as holes in the plate) | a dead line of dots, two each side of the X |
-| offline | `--mood-offline` (gray) | Wi-Fi with a "!" (3 solid round-ended arcs, a gap cut around the "!"), inside a plain outer ring | the same Wi-Fi, shrunk to sit inside the plate ([ADR-0050](adr/0050-offline-is-a-wifi-with-a-bang.md)) |
+| offline | `--mood-offline` (gray) | Wi-Fi with a "!" (3 solid round-ended arcs, a gap cut around the "!"), inside a plain outer ring | the same Wi-Fi, shrunk to sit inside the plate ([ADR-0043](adr/0043-orb-keeps-the-pre-glass-status-colors.md)) |
 | checking | `--mood-busy` | all clear's picture, breathing | all clear's picture, breathing |
 
 Checking lasts the whole probe round: the icon breathes until the snapshot is `settled`, the same
@@ -185,7 +185,7 @@ a list header, menu items) are **28px with 10px** (`--h-control-sm`, `--r-contro
 Cancel / Save are **36px with 12px** (`--h-action`). Buttons and chips share one surface
 (`--btn-bg`, `--btn-border`, `--btn-shadow`). Lists are cards of **16px** (`--r-card`, surface
 `--card-*`); a dialog is a **16px** sheet (the Settings cards inside it are 12px) (`--r-sheet`) on that same card surface, blurred over the page.
-The ☰'s drawer is the ☰'s own rounded square stretched to the left: as tall as the ☰ (`--hero-btn`),
+The ☰ and its drawer take the orb's shape (`--r-hero`, set from `data-icon` on `.hero`): 12px corners beside the Pulse orb, a circle beside Rings, whose drawer then opens as a pill. The ☰'s drawer is the ☰'s own shape stretched to the left: as tall as the ☰ (`--hero-btn`),
 every cell (the actions and the ☰ as the end cell) one 32px box with its hover fill inset 2px, so the
 gap is the same on every side and at both ends. The hero sits on the cards' lines: the logo shares the cards' left edge, the headline and the IP chip sit
 `--hero-text-inset` (6px) in from it, and the ☰ ends on the cards' right edge, and the orb's halo (`--orb-halo`, 6px) ends on the right edge of
@@ -230,7 +230,7 @@ beak (constant amber `#f2792b`) and the status-orb and button gradients.
 | Component | File | Notes |
 |---|---|---|
 | **Canary** | [`Canary.tsx`](../src/components/Canary.tsx) | The brandmark SVG bird. The **eye is the live status light** — `currentColor` = `--sev`, so it cross-fades with the mood. |
-| **StatusHero** | [`StatusHero.tsx`](../src/components/StatusHero.tsx) | Logo, then the ☰ (`HeroMenu`, `.hero-btn`), which grows a glass drawer to its left with Add list, Edit order and Settings, each named in a tip on hover; headline, subtitle, IP chip and update button on the left; the **orb** (`StatusOrb`) on the right. The orb is the refresh button: its icon (Rings or Pulse) carries the mood, hover shows a refresh arrow (`OrbRefresh`, drawn in the orb icons' frame and stroke at 0.85 opacity), busy pulses. The soft glow is a child of the orb wrapper. |
+| **StatusHero** | [`StatusHero.tsx`](../src/components/StatusHero.tsx) | Logo, then the ☰ (`HeroMenu`, `.hero-btn`), which grows a glass drawer to its left with Add list, Edit order and Settings, each named in a tip on hover; headline, subtitle, IP chip and update button on the left; the **orb** (`StatusOrb`) on the right. The orb is the refresh button: its icon (Rings or Pulse) carries the mood, hover shows a refresh arrow (`OrbRefresh`, drawn in the orb icons' frame and stroke at 0.85 opacity: on Rings a circle that spins in, on Pulse the same arrow round the orb's rounded square that slides clockwise along it into place, since a spinning square reads as crooked; e2e 8g), busy pulses. The soft glow is a child of the orb wrapper. |
 | **orbIcons** | [`orbIcons.tsx`](../src/components/orbIcons.tsx) | `ORB_ICON[style][mood]`, `OrbIcon`, `OrbRefresh` (the hover arrow) and `OrbThumb` (the live sample in Settings). |
 | **ServiceList** | [`ServiceList.tsx`](../src/components/ServiceList.tsx) | The list card. Gray name chip (a green shield inside it marks a healthy Critical list). Fully down, the chip takes a soft red tint with a thin, slowly breathing ring; a Critical list's turns solid red and pulses instead · `n/m` or **All unreachable** · add · ⋯ menu · collapse chevron. Rows animate open/closed ([`useCollapsible`](../src/components/useCollapsible.ts)). Drives drag reordering of its services (inner `DndContext`). |
 | **ServiceRow** | [`ServiceRow.tsx`](../src/components/ServiceRow.tsx) | Favicon tile with letter fallback and a corner status dot · name + host · latency · **Blocked**/**Down**/*TCP only* as plain text in their state color (same weight as the latency). Multi-endpoint rows show `7 ● · 4 ●` and expand on a click anywhere on the row. ⋮ menu; a grip replaces the tile in reorder mode. |
@@ -312,5 +312,5 @@ Personality lives in color + the single Canary mark, not in layout, so it surviv
 - **Tray** — shipped ([ADR-0008](adr/0008-tray-icon-runtime-severity-light.md)). The menubar icon
   carries the severity light, rendered at runtime from the same Severity the hero uses, in the orb's
   `--mood-*` colors, with the Offline state (cut-off) too. Its look is picked in **Settings →
-  Appearance** ([ADR-0049](adr/0049-menu-bar-icon-can-differ-from-the-orb.md)); see below.
+  Appearance** ([ADR-0044](adr/0044-one-status-icon-setting-for-orb-and-menu-bar.md)); see below.
 - **Widget** — still later. Plan: compact Canary + one-line SeverityCopy + a strip of state chips.

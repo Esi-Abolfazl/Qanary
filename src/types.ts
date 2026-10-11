@@ -94,7 +94,7 @@ export interface ServiceList {
  *  menu-bar icon both draw it (ADR-0044). */
 export type StatusIcon = "rings" | "pulse";
 
-/** Which picture the menu-bar icon draws: the app's status icon (`same`), or its own (ADR-0048). */
+/** Which picture the menu-bar icon draws: the app's status icon (`same`), or its own (ADR-0044). */
 export type TrayShape = "same" | StatusIcon;
 
 export interface Config {
