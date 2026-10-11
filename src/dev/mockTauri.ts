@@ -129,7 +129,7 @@ w.__TAURI_INTERNALS__ = {
   unregisterCallback: (id: number) => callbacks.delete(id),
   runCallback: (id: number, data: unknown) => callbacks.get(id)?.(data),
   callbacks,
-  invoke: async (cmd: string, args?: { event?: string; handler?: number }) => {
+  invoke: async (cmd: string, args?: { event?: string; handler?: number; patch?: Partial<Config> }) => {
     w.__INVOKED_CMDS__.push(cmd);
     switch (cmd) {
       case "plugin:event|listen":
@@ -147,8 +147,11 @@ w.__TAURI_INTERNALS__ = {
       case "add_list":
       case "update_list":
       case "remove_list":
-      case "reset_config":
       case "update_settings":
+        // Save applies the patch, so the preview shows the new status icon and menu-bar look.
+        Object.assign(cfg, args!.patch);
+        return cfg;
+      case "reset_config":
       case "import_config":
         return cfg;
       default:
