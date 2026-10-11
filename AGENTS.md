@@ -1,11 +1,11 @@
-# Qanary — project notes for Codex
+# Qanary · project notes
 
 Desktop connectivity monitor. Traffic-light status for reachability of service lists.
 Full v1 design: `.claude/plans/qanary-v1.md` (local only — `.claude/` is gitignored).
 
 ## What it does
 
-- Probes two seeded lists (Internet: Codex/Telegram/ChatGPT/Google/X; Intranet: digikala/torob/divar/snapp).
+- Probes two seeded lists (Internet: Claude/Telegram/ChatGPT/Google/X; Intranet: digikala/torob/divar/snapp).
 - Internet list all-down → yellow (warn). Intranet list all-down → red (critical).
 - Shows WAN IP + country flag + short name.
 - Users add own services/lists. Config persisted as local JSON.
@@ -62,28 +62,6 @@ pnpm dev                       # then http://localhost:1420/?mock (or ?mock=ok, 
 - Frontend subscribes to the `status-update` (full snapshot) and `service-update` (per-Service
   delta) Tauri events (no polling), plus `menu-action` from the macOS app menu (ADR-0045).
 - Backend owns all probe/rollup/persistence logic; the tray reuses the same snapshot.
-
-## Every reply: scannable, ends with a status footer
-
-The user has ADHD — optimize every reply for scanning, not reading:
-front-load the answer, keep paragraphs short, make actions explicit.
-
-End every reply — even one-liners — with this block, always last,
-always in this order:
-
----
-**Status:** ✅ done — or ⏳ in progress + what remains, in one line
-**Need from you:** one concrete question or action — or "nothing"
-**Heads-up:** ⚠️ must-know / must-do with consequences — or "none"
----
-
-- One short line per row, never a paragraph.
-- "Need from you" is a specific ask ("reply yes to apply", "paste the
-  error"), never a vague "let me know".
-- Heads-up is only for real consequences: side effects, processes
-  left running, things that will break, deadlines. No filler.
-- If all three are trivial, compress to one line:
-  `Status: ✅ done · Need: nothing · Heads-up: none`
 
 ## ADRs
 
