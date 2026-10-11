@@ -1,7 +1,7 @@
 # Qanary · project notes
 
 Desktop connectivity monitor. Traffic-light status for reachability of service lists.
-Full v1 design: `.claude/plans/qanary-v1.md` (local only — `.claude/` is gitignored).
+Full v1 design: `.claude/plans/qanary-v1.md` (local only: `.claude/` is gitignored).
 
 ## What it does
 
@@ -24,32 +24,33 @@ source "$HOME/.cargo/env"      # until login shell picks up cargo
 pnpm install                   # frontend deps
 pnpm tauri dev                 # run app (dev)
 pnpm tauri build               # release bundle
-pnpm test                      # frontend (vitest) + backend (cargo)
-pnpm test:ui                   # frontend only — vitest run (jsdom)
-pnpm test:rust                 # backend only — cargo test
+pnpm check                     # tsc: app + test files (tsconfig.tests.json)
+pnpm test                      # the CI gate: check, test:ui, test:rust
+pnpm test:ui                   # frontend only: vitest run (jsdom)
+pnpm test:rust                 # backend only: cargo test
 pnpm test:e2e                  # Playwright e2e vs pnpm dev (port 1420)
 pnpm dev                       # then http://localhost:1420/?mock (or ?mock=ok, ?mock=down, ?mock=critical, ?mock=offline): UI on canned data, no Tauri
 ```
 
 ## Testing
 
-- **Backend logic** (`pnpm test:rust`): probe classify, rollup, persistence — cargo unit tests.
+- **Backend logic** (`pnpm test:rust`): probe classify, rollup, persistence (cargo unit tests).
 - **Frontend unit** (`pnpm test:ui`): vitest + jsdom. Pure-logic specs (`src/utils/*.test.ts`) plus
   component tests that render the real tree against a mocked `./api` (`src/App.test.tsx`).
-  No Tauri runtime needed — `vi.mock("./api")` stands in for the `invoke` bridge.
+  No Tauri runtime needed: `vi.mock("./api")` stands in for the `invoke` bridge.
 - **Frontend e2e** (`pnpm test:e2e`): Playwright drives `pnpm dev` (port 1420) in headless
-  system Chrome (`channel: "chrome"` — no `playwright install`). The Tauri IPC bridge is the app's
+  system Chrome (`channel: "chrome"`, no `playwright install`). The Tauri IPC bridge is the app's
   own dev mock (`src/dev/mockTauri.ts`, ADR-0042): fixtures open `/?mock` and hand it data as
   `window.__MOCK__`. Covers: initial render, refresh,
   add-list, settings, Config card, a list reorder surviving the next `service-update`, list columns across window widths,
   the hero and cards on shared lines, control and card radii, the ☰ drawer, and the orb's motion.
-  Native WKWebView (the actual app) still can't be WebDriver-driven on macOS — e2e targets the
+  Native WKWebView (the actual app) still can't be WebDriver-driven on macOS: e2e targets the
   web frontend served by Vite, not the bundled native binary.
 - **CI** (`.github/workflows/verify.yml`): `pnpm check`, `test:ui` and `test:rust` on every PR and push to
   `main`; `release.yml` calls it before a build. e2e is not in CI (ADR-0013).
-- **Self-verify before declaring done.** After touching frontend code, run `pnpm test:ui`
+- **Self-verify before declaring done.** After touching frontend code, run `pnpm check` (types for app and test files, as CI does; a bare `tsc -p .` skips the tests) and `pnpm test:ui`
   (logic + component) and, for interaction/UI changes, `pnpm test:e2e`. These replace driving
-  the native app — use them instead of asking the user to test. Add/extend specs for new logic.
+  the native app: use them instead of asking the user to test. Add/extend specs for new logic.
 
 ## Env
 
