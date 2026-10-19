@@ -8,6 +8,21 @@ heading) become that release's notes. Dev-log-only subsections (`## Internal`, `
 `## Development`, `## Chore`, `## CI`, `## Build`, `## More info`) appear on the GitHub
 release page but are hidden from the in-app "What's new" modal.
 
+## [1.0.3]
+
+## What's new
+
+- Updates now install in the background and start the next time Qanary opens, which for most people is the next login. To turn this off: Settings › System › Install updates automatically.
+- If the update check runs before the network is up (right after login), it retries in 5 minutes, not 6 hours.
+
+## Fix
+
+- Outage alerts work again while the window is hidden. Before, a disconnect could pass silently and you heard only the recovery sound.
+
+## More info
+
+- [ADR 0029: post-wake alert grace](https://github.com/Esi-Abolfazl/Qanary/blob/main/docs/adr/0029-settled-snapshots-and-post-wake-alert-grace.md) now tells a real sleep from a throttled window. [ADR 0001](https://github.com/Esi-Abolfazl/Qanary/blob/main/docs/adr/0001-github-releases-and-self-update.md) and [ADR 0015](https://github.com/Esi-Abolfazl/Qanary/blob/main/docs/adr/0015-background-interval-visibility-self-update-check.md) cover the background install.
+
 ## [1.0.2]
 
 ## What's new
