@@ -1,6 +1,6 @@
 # 0015. Background interval + visibility self-update check with version supersede
 
-- **Status:** accepted
+- **Status:** accepted; amended 2026-10-19 (failed check retries in 5 minutes)
 - **Date:** 2026-06-25
 - **Deciders:** Esi-Abolfazl
 
@@ -48,6 +48,12 @@ fires `runUpdateCheck` every 6 hours while the window is open. The visibility li
 it when the document becomes visible *and* at least one interval period has elapsed since the
 last check — covering webview timer throttling during laptop sleep or app backgrounding.
 Both are cleaned up in the `useEffect` return.
+
+*Amended 2026-10-19:* a failed background check retries after `UPDATE_RETRY_MS` (5 minutes)
+rather than waiting out the 6-hour interval. Launched as a login item, the app checks before
+wifi/VPN are up, and that check used to be its only one for 6 hours. The startup check also
+waits for the config now, since `auto_update` decides whether a found release installs
+(ADR-0001).
 
 ## Alternatives considered
 

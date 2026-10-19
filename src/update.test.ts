@@ -119,3 +119,24 @@ describe("a downloaded update is the one that installs", () => {
     expect(newer.install).not.toHaveBeenCalled();
   });
 });
+
+describe("auto-update installs without relaunching", () => {
+  it("a later restart only relaunches; the update installs once", async () => {
+    vi.resetModules();
+    const update = await import("./update");
+    const { relaunch } = await import("@tauri-apps/plugin-process");
+    vi.mocked(relaunch).mockClear();
+    const handle = makeUpdate("3.0.0");
+    mockUpdate = handle;
+    await update.checkForUpdate();
+    await update.downloadUpdate(() => {});
+
+    await update.installUpdate();
+    expect(handle.install).toHaveBeenCalledTimes(1);
+    expect(relaunch).not.toHaveBeenCalled();
+
+    await update.installAndRelaunch();
+    expect(handle.install).toHaveBeenCalledTimes(1);
+    expect(relaunch).toHaveBeenCalledTimes(1);
+  });
+});

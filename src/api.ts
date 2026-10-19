@@ -87,6 +87,7 @@ export type SettingsPatch = Partial<
     | "status_icon"
     | "tray_filled"
     | "tray_shape"
+    | "auto_update"
   >
 >;
 

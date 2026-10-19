@@ -34,6 +34,7 @@ vi.mock("./update", () => ({
   checkForUpdate: vi.fn().mockResolvedValue(null),
   downloadUpdate: vi.fn(),
   installAndRelaunch: vi.fn(),
+  installUpdate: vi.fn(),
 }));
 
 import App from "./App";
@@ -86,6 +87,8 @@ const CONFIG: Config = {
   status_icon: "rings",
   tray_filled: false,
   tray_shape: "same",
+  // Off: the update specs drive the manual path; the auto-update specs turn it on.
+  auto_update: false,
   last_changelog_version: null,
 };
 
@@ -105,6 +108,7 @@ beforeEach(() => {
   vi.mocked(update.checkForUpdate).mockResolvedValue(null);
   vi.mocked(update.downloadUpdate).mockResolvedValue();
   vi.mocked(update.installAndRelaunch).mockResolvedValue();
+  vi.mocked(update.installUpdate).mockResolvedValue();
 });
 
 /** Add list, Edit order and Settings sit in the hero's ☰ drawer. */
@@ -177,6 +181,21 @@ describe("App", () => {
 
     expect(await screen.findByRole("alert")).toHaveTextContent("disk full");
     expect(screen.getByRole("heading", { name: /^settings$/i })).toBeInTheDocument();
+  });
+
+  it("the Install updates automatically switch is saved with the form", async () => {
+    const user = userEvent.setup();
+    vi.mocked(api.updateSettings).mockResolvedValue(CONFIG);
+    render(<App />);
+    await waitFor(() => screen.getByText("All clear"));
+
+    await heroAction(user, /^settings$/i);
+    await user.click(screen.getByLabelText(/install updates automatically/i));
+    await user.click(screen.getByRole("button", { name: /^save$/i }));
+
+    await waitFor(() =>
+      expect(api.updateSettings).toHaveBeenCalledWith(expect.objectContaining({ auto_update: true })),
+    );
   });
 
   it("Dock and the other settings are saved in one write", async () => {
@@ -351,6 +370,46 @@ describe("App", () => {
       await user.click(screen.getByRole("button", { name: /install & restart/i }));
       expect(update.installAndRelaunch).toHaveBeenCalledTimes(1);
       expect(update.downloadUpdate).toHaveBeenCalledTimes(1);
+    });
+
+    it("with auto-update on, a found release downloads and installs silently, no relaunch", async () => {
+      vi.mocked(api.getConfig).mockResolvedValue({ ...CONFIG, auto_update: true });
+      vi.mocked(update.checkForUpdate).mockResolvedValue({ version: "1.0.1", body: null });
+      render(<App />);
+      await waitFor(() => expect(update.installUpdate).toHaveBeenCalledTimes(1));
+      expect(update.downloadUpdate).toHaveBeenCalledTimes(1);
+      expect(update.installAndRelaunch).not.toHaveBeenCalled();
+      // A restart is still offered for anyone who wants the new version now.
+      expect(await screen.findByRole("button", { name: /^restart$/i })).toBeInTheDocument();
+    });
+
+    // Login autostart runs before wifi/VPN are up: the first check fails and must not wait 6h.
+    it("a check that fails at boot retries in 5 minutes and still auto-installs", async () => {
+      vi.useFakeTimers();
+      try {
+        vi.mocked(api.getConfig).mockResolvedValue({ ...CONFIG, auto_update: true });
+        vi.mocked(update.checkForUpdate)
+          .mockRejectedValueOnce(new Error("offline"))
+          .mockResolvedValue({ version: "1.0.1", body: null });
+        render(<App />);
+        await act(() => vi.advanceTimersByTimeAsync(1_000));
+        expect(update.checkForUpdate).toHaveBeenCalledTimes(1);
+        expect(update.installUpdate).not.toHaveBeenCalled();
+
+        await act(() => vi.advanceTimersByTimeAsync(5 * 60 * 1000));
+        expect(update.checkForUpdate).toHaveBeenCalledTimes(2);
+        expect(update.installUpdate).toHaveBeenCalledTimes(1);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it("with auto-update off, a found release waits for the user", async () => {
+      vi.mocked(update.checkForUpdate).mockResolvedValue({ version: "1.0.1", body: null });
+      render(<App />);
+      await screen.findByRole("button", { name: /^update$/i });
+      expect(update.downloadUpdate).not.toHaveBeenCalled();
+      expect(update.installUpdate).not.toHaveBeenCalled();
     });
 
     it("Settings shows a hero-started download instead of offering a second one", async () => {

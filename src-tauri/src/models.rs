@@ -190,6 +190,10 @@ pub struct Config {
     /// Additive — older configs load as `Same`, which is what they did before.
     #[serde(default)]
     pub tray_shape: TrayShape,
+    /// Download and install a found update in the background; it runs from the next launch.
+    /// Additive: older configs load as on.
+    #[serde(default = "default_true")]
+    pub auto_update: bool,
     /// Last app version we showed the "What's new" changelog for. On startup, if the
     /// running version differs, we show that version's CHANGELOG section once and update
     /// this. None = fresh install (we record the version but don't show notes).
@@ -295,6 +299,7 @@ impl Default for Config {
             status_icon: StatusIcon::default(),
             tray_filled: default_tray_filled(),
             tray_shape: TrayShape::default(),
+            auto_update: true,
             last_changelog_version: None,
         }
     }

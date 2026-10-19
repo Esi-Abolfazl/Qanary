@@ -95,6 +95,7 @@ const CONFIG: Config = {
   status_icon: "pulse",
   tray_filled: true,
   tray_shape: "same",
+  auto_update: true,
   last_changelog_version: null,
 };
 

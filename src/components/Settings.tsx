@@ -174,6 +174,7 @@ export function Settings({
   const [loginInitial, setLoginInitial] = useState(false);
   const [loginError, setLoginError] = useState<string | null>(null);
   const [hideDock, setHideDockState] = useState(false);
+  const [autoUpdate, setAutoUpdate] = useState(true);
   const [statusIcon, setStatusIcon] = useState<StatusIcon>("pulse");
   const [trayFilled, setTrayFilled] = useState(true);
   const [trayShape, setTrayShape] = useState<TrayShape>("same");
@@ -212,6 +213,7 @@ export function Settings({
     setBlockedSound(config.blocked_sound);
     setVolume(config.notify_volume);
     setHideDockState(config.hide_dock);
+    setAutoUpdate(config.auto_update);
     setStatusIcon(config.status_icon);
     setTrayFilled(config.tray_filled);
     setTrayShape(config.tray_shape);
@@ -282,6 +284,7 @@ export function Settings({
         blocked_sound: blockedSound,
         notify_volume: volume,
         hide_dock: hideDock,
+        auto_update: autoUpdate,
         status_icon: statusIcon,
         tray_filled: trayFilled,
         tray_shape: trayShape,
@@ -611,6 +614,17 @@ export function Settings({
                   </div>
                 </>
               )}
+
+              <div className="system-toggle-row">
+                <label className="system-toggle-label" htmlFor="auto-update-toggle">
+                  Install updates automatically
+                </label>
+                <Switch
+                  id="auto-update-toggle"
+                  checked={autoUpdate}
+                  onChange={setAutoUpdate}
+                />
+              </div>
             </SettingsCard>
 
             {saveError && <p className="modal-error" role="alert">{saveError}</p>}

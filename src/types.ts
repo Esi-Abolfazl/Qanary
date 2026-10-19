@@ -124,6 +124,8 @@ export interface Config {
   tray_filled: boolean;
   /** Menu bar only: follow the status icon, or draw its own picture whatever the orb shows. */
   tray_shape: TrayShape;
+  /** Install a found update in the background; it runs from the next launch. */
+  auto_update: boolean;
   last_changelog_version: string | null;
 }
 

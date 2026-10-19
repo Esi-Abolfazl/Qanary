@@ -204,6 +204,7 @@ pub struct SettingsPatch {
     pub status_icon: Option<crate::models::StatusIcon>,
     pub tray_filled: Option<bool>,
     pub tray_shape: Option<crate::models::TrayShape>,
+    pub auto_update: Option<bool>,
 }
 
 #[tauri::command]
@@ -253,6 +254,7 @@ fn apply_settings(cfg: &mut Config, p: SettingsPatch) {
         (p.blocked_sound, &mut cfg.blocked_sound),
         (p.hide_dock, &mut cfg.hide_dock),
         (p.tray_filled, &mut cfg.tray_filled),
+        (p.auto_update, &mut cfg.auto_update),
     ];
     for (new, field) in flags {
         if let Some(v) = new {

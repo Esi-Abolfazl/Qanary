@@ -11,7 +11,7 @@ import { Settings } from "./components/Settings";
 import { ListModal } from "./components/ListModal";
 import { ServiceModal } from "./components/ServiceModal";
 import { ChangelogModal } from "./components/ChangelogModal";
-import { checkForUpdate, downloadUpdate, installAndRelaunch } from "./update";
+import { checkForUpdate, downloadUpdate, installAndRelaunch, installUpdate } from "./update";
 import { nextUpdatePhase } from "./utils/updateCheck";
 import { criticalTransitions, blockedTransitions } from "./utils/transitions";
 import { fireBatch, reconcilePending, type BatchEntry } from "./utils/alerts";
@@ -43,6 +43,9 @@ const DEFAULT_TIMEOUT_MS = 3000;
 
 // Re-check for updates every 6 hours in the background (long-running machines / sleep wakeup).
 const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000;
+// A failed check retries this soon instead: at login autostart the network is often not up yet,
+// and waiting the full interval would leave a boot-launched app a version behind until then.
+const UPDATE_RETRY_MS = 5 * 60 * 1000;
 
 // --- System wake -------------------------------------------------------------------------
 // The wall clock (`Date.now`) runs through a system sleep; the monotonic clock
@@ -389,12 +392,30 @@ function App() {
     setUpdateVersion(next.version);
     return next.phase !== null;
   }
-  // A failed background check is non-fatal; the next interval retries.
-  const backgroundUpdateCheck = () => void runUpdateCheck().catch(() => {});
+  // A failed background check is non-fatal: it retries after UPDATE_RETRY_MS.
+  const updateRetryRef = useRef<number | null>(null);
+  function backgroundUpdateCheck() {
+    if (updateRetryRef.current !== null) window.clearTimeout(updateRetryRef.current);
+    updateRetryRef.current = null;
+    void runUpdateCheck().then(autoInstall, () => {
+      updateRetryRef.current = window.setTimeout(backgroundUpdateCheck, UPDATE_RETRY_MS);
+    });
+  }
+
+  /**
+   * With `auto_update` on, a background check that found a release downloads and installs it
+   * silently; it runs from the next launch. The hero still offers a restart for anyone who wants
+   * it now. A failure leaves the manual path ("available" or "ready") as it was.
+   */
+  async function autoInstall() {
+    if (!configRef.current?.auto_update) return;
+    if (await handleDownload()) await installUpdate().catch(() => {});
+  }
 
   useEffect(() => {
     api.getSnapshot().then((s) => s && handleSnapshot(s), report);
-    api.getConfig().then(setConfig, report);
+    // The startup update check waits for the config: it decides whether to auto-install.
+    api.getConfig().then(setConfig, report).finally(backgroundUpdateCheck);
     api.takeLoadWarning().then((w) => w && setNotice(w));
     // Show the "What's new" changelog once when the app version changed since last launch.
     // Backend reads the bundled CHANGELOG, so this fires for any update path (in-app or manual).
@@ -419,8 +440,6 @@ function App() {
       if (action === "edit-order") toggleEditOrder();
       else setModal({ kind: action === "settings" ? "settings" : "addList" });
     }).then(keep);
-    // Startup check
-    backgroundUpdateCheck();
     // Background interval: re-check every 6 h so long-running machines stay current.
     const intervalId = window.setInterval(backgroundUpdateCheck, UPDATE_CHECK_MS);
     // Wake detector: a tick that observes far more wall clock than its own interval means the
@@ -441,6 +460,7 @@ function App() {
       if (timerRef.current !== null) window.clearTimeout(timerRef.current);
       if (graceTimerRef.current !== null) window.clearTimeout(graceTimerRef.current);
       window.clearInterval(intervalId);
+      if (updateRetryRef.current !== null) window.clearTimeout(updateRetryRef.current);
       window.clearInterval(heartbeatId);
       document.removeEventListener("visibilitychange", handleVisibilityChange);
     };

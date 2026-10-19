@@ -1,6 +1,6 @@
 # 0001. Distribute Qanary via GitHub Releases and self-update with Tauri's official updater
 
-- **Status:** accepted
+- **Status:** accepted; amended 2026-10-19 (install in the background, no restart)
 - **Date:** 2026-06-16
 - **Deciders:** Esi-Abolfazl
 
@@ -25,6 +25,18 @@ The app checks silently on startup and shows a banner if an update is available;
 "Check for updates" button is always present. The user confirms before install; the app then
 calls `tauri-plugin-process` to relaunch after installation.
 
+*Amended 2026-10-19:* with **Install updates automatically** on (Settings › System, default on,
+`auto_update`), a background check that finds a release downloads it and calls `install()`
+without relaunching. On macOS the plugin swaps `/Applications/Qanary.app` in place and the
+running process carries on, so the next launch runs the new version. For most users that launch
+is the login item at the next boot (the menu-bar icon is all they use), and a manual open works
+the same, since the login item and the updater name the same bundle. Nothing restarts and
+nothing asks. The confirm-and-relaunch flow stays: the hero's Restart (after a silent install it
+only relaunches) and Settings' Install & restart. A failed background check retries after 5
+minutes instead of 6 hours, because the login item starts before wifi/VPN are up (ADR-0015).
+On Windows the plugin's `install()` runs the installer and exits the app, so this path must
+become install-on-quit there before Windows ships (`shortcut:` in `src/update.ts`).
+
 Apple code signing and notarization are skipped for now. The updater's own minisign
 signature is independent of Apple signing and is sufficient for verifying update integrity.
 
@@ -36,7 +48,8 @@ signature is independent of Apple signing and is sufficient for verifying update
   GitHub often. Auto-check on startup is low-friction and matches the app's connectivity
   monitoring theme.
 - **Auto-install without confirmation** — rejected. Restarting without notice is disruptive.
-  The confirm-then-relaunch flow is safer and was explicitly chosen.
+  The confirm-then-relaunch flow is safer and was explicitly chosen. *Amended 2026-10-19:*
+  installing without a restart is now the default; restarting without notice is still rejected.
 - **Cross-platform CI matrix now** — deferred. CLAUDE.md says mac-first. Windows and Linux
   can be added to the matrix later by adding entries to the `strategy.matrix`.
 

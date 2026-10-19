@@ -74,6 +74,7 @@ export const CONFIG: Config = {
   status_icon: "rings",
   tray_filled: false,
   tray_shape: "same",
+  auto_update: true,
   last_changelog_version: null,
 };
 

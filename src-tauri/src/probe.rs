@@ -468,6 +468,7 @@ mod tests {
             status_icon: Default::default(),
             tray_filled: false,
             tray_shape: Default::default(),
+            auto_update: true,
             last_changelog_version: None,
         };
         let lists = checking_lists(&config);

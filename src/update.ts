@@ -51,11 +51,25 @@ export async function downloadUpdate(
   }
 }
 
-/** Installs the downloaded update and relaunches the app. */
-export async function installAndRelaunch(): Promise<void> {
+// The handle already installed on disk (auto-update): relaunching it is all that's left.
+let installed: Update | null = null;
+
+/**
+ * Installs the downloaded update without relaunching: it runs from the next launch. On macOS the
+ * plugin swaps the app bundle in place and the running process carries on.
+ * shortcut: on Windows the plugin's install runs the installer and exits the app, so this would
+ * quit it mid-session; install on quit there instead when Windows ships.
+ */
+export async function installUpdate(): Promise<void> {
   if (!pending) throw new Error("no downloaded update");
+  await pending.install();
+  installed = pending;
+}
+
+/** Installs the downloaded update (unless already installed) and relaunches the app. */
+export async function installAndRelaunch(): Promise<void> {
   // Changelog is shown on next boot via take_new_changelog (version-change detection),
   // so nothing to persist here.
-  await pending.install();
+  if (installed !== pending) await installUpdate();
   await relaunch();
 }

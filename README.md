@@ -107,4 +107,4 @@ Prebuilt apps are on the [Releases page](https://github.com/Esi-Abolfazl/Qanary/
 
 ## In-app updates
 
-Qanary checks for updates silently on every launch and re-checks every ~6 hours while running. An update button appears when a newer version is available — you can also trigger a check from **Settings**. After it relaunches, a what's-new dialog shows the new version's release notes.
+Qanary checks for updates silently on every launch and re-checks every ~6 hours while running. With **Install updates automatically** on (Settings › System, the default), a new version downloads and installs in the background and runs from the next launch, usually your next login. Nothing restarts or asks. An update button still appears when a newer version is available, for restarting into it now, and you can also trigger a check from **Settings**. After it relaunches, a what's-new dialog shows the new version's release notes.
