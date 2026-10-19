@@ -45,12 +45,15 @@ const DEFAULT_TIMEOUT_MS = 3000;
 const UPDATE_CHECK_MS = 6 * 60 * 60 * 1000;
 
 // --- System wake -------------------------------------------------------------------------
-// The webview's timers stop while the machine is asleep, so a heartbeat tick that comes back
-// with far more wall clock elapsed than its own interval is the wake signal. No OS API is
-// involved, so this works identically on Windows and Linux.
+// The wall clock (`Date.now`) runs through a system sleep; the monotonic clock
+// (`performance.now`, mach_absolute_time on macOS) does not. The difference between the two
+// across heartbeat ticks is time spent asleep. A late tick alone is not a wake: a hidden window
+// is throttled (App Nap) far past WAKE_GAP_MS, and reading that as a wake held every
+// outage alert in a grace window until the recovery overwrote it.
+// shortcut: whether the monotonic clock pauses during sleep on WebView2 (Windows) and WebKitGTK
+// (Linux) is unverified; check it there when those platforms ship.
 const WAKE_TICK_MS = 5_000;
-// Gap that counts as a suspension rather than WebKit throttling a hidden window (which caps out
-// around 1 tick/s). A false positive costs one silent grace window, never a lost alert.
+// Sleep shorter than this is not treated as a wake (the network stack barely notices it).
 const WAKE_GAP_MS = 20_000;
 // After a wake the OS spends several seconds re-establishing wifi/DHCP/DNS/VPN. Probes in that
 // window fail honestly but describe the wake, not an outage the user had — so alerts are held
@@ -197,24 +200,24 @@ function App() {
   // Wall-clock time of the last edge that armed the batch. Read only to spot a batch that
   // outlived a process suspension — see armFlush.
   const lastEdgeAtRef = useRef(0);
-  // Wall-clock time the process was last seen running (see detectWake). A large gap means it was
-  // suspended.
-  const lastTickRef = useRef(Date.now());
+  // Wall-clock and monotonic time the process was last seen running (see detectWake).
+  const lastTickRef = useRef({ wall: Date.now(), mono: performance.now() });
   // While non-null, the deadline (ms) of the open post-wake grace window: snapshots repaint but
   // are not diffed, and the baseline stays at the pre-sleep state.
   const wakeGraceUntilRef = useRef<number | null>(null);
   const graceTimerRef = useRef<number | null>(null);
 
   /**
-   * Did the process just come back from a suspension (system sleep / App Nap)? Any callback can
-   * be the first to run after resume — the 4s alert timer often beats the 5s heartbeat — so each
-   * entry point asks before acting on what it holds (audit A09).
+   * Did the system just wake from sleep? Any callback can be the first to run after resume (the
+   * 4s alert timer often beats the 5s heartbeat), so each entry point asks before acting on what
+   * it holds (audit A09).
    */
   function detectWake(): boolean {
-    const now = Date.now();
-    const gap = now - lastTickRef.current;
-    lastTickRef.current = now;
-    if (gap <= WAKE_GAP_MS) return false;
+    const wall = Date.now();
+    const mono = performance.now();
+    const slept = wall - lastTickRef.current.wall - (mono - lastTickRef.current.mono);
+    lastTickRef.current = { wall, mono };
+    if (slept <= WAKE_GAP_MS) return false;
     handleWake();
     return true;
   }

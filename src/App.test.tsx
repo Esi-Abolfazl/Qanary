@@ -1942,6 +1942,25 @@ describe("App", () => {
           body: "All critical lists are down.",
         });
       });
+
+      // A hidden window's timers are throttled far past WAKE_GAP_MS, but both clocks keep
+      // running. Reading that as a wake held the outage in a grace window until the recovery
+      // overwrote it: the user heard only "Recovered".
+      it("a throttled hidden window is not a wake: the outage alerts on time", async () => {
+        const { sendNotification } = await import("@tauri-apps/plugin-notification");
+        const handleSnapshot = await mount({ down_notify: true });
+        handleSnapshot(CRIT);
+
+        const fakeNow = Date.now;
+        const fakeMono = performance.now.bind(performance);
+        vi.spyOn(Date, "now").mockImplementation(() => fakeNow.call(Date) + 90_000);
+        vi.spyOn(performance, "now").mockImplementation(() => fakeMono() + 90_000);
+
+        handleSnapshot({ ...CRIT_DOWN, cut_off: true });
+        await settle(QUIET_MS);
+        expect(sendNotification).toHaveBeenCalledTimes(1);
+        expect(sendNotification).toHaveBeenCalledWith(OFFLINE);
+      });
     });
   });
 

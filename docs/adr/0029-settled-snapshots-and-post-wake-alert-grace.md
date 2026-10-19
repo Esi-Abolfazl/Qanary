@@ -1,6 +1,6 @@
 # 0029. Settled snapshots and a post-wake alert grace window
 
-- **Status:** accepted
+- **Status:** accepted; amended 2026-10-19 (wake = sleep time from two clocks, not a late tick)
 - **Date:** 2026-08-26
 - **Deciders:**
 
@@ -62,8 +62,17 @@ suspension long enough to strand a batch but too short to read as a system sleep
 paused debugger, severe CPU starvation). Above `WAKE_GAP_MS` it is `handleWake` that clears the
 batch, so the two mechanisms partition the range rather than overlap.
 
-**A detected wake opens a grace window.** A `WAKE_TICK_MS` heartbeat compares wall-clock gaps
-between its own ticks; a gap over `WAKE_GAP_MS` means the process was suspended. While the
+**A detected wake opens a grace window.** A `WAKE_TICK_MS` heartbeat measures time asleep
+between its own ticks: the wall-clock gap minus the monotonic (`performance.now`) gap. Over
+`WAKE_GAP_MS` means the system slept.
+
+*Amended 2026-10-19:* the first version read any wall-clock gap over `WAKE_GAP_MS` as a wake.
+A hidden window's timers are throttled (App Nap) well past 20s, so every late tick reopened the
+grace window: the outage alert was held, then overwritten in `pendingRef` by the recovery edge,
+and the user heard only "Recovered". The wall clock runs through a system sleep and the
+monotonic clock (mach_absolute_time on macOS) does not, while throttling advances both, so their
+difference separates the two exactly. Whether WebView2 and WebKitGTK pause the monotonic clock
+during sleep is unverified. While the
 window is open, settled snapshots repaint but are not diffed and the baseline is not advanced.
 The window closes on the first settled snapshot with no cut-off (the network has proven itself)
 or when `WAKE_GRACE_MAX_MS` expires, whichever comes first — a timer forces the latter, because
@@ -113,9 +122,9 @@ alerted before the sleep); down→up one "Recovered".
 ### Negative / accepted trade-offs:
 
 - A real outage arriving within `WAKE_GRACE_MAX_MS` of a wake is announced up to that late.
-- A false-positive wake (a debugger pause, or severe CPU starvation for over `WAKE_GAP_MS`)
-  opens one grace window. No alert is lost — the window still closes with a diff — but a genuine
-  outage in that span is delayed.
+- A false-positive wake would hold the outage alert and let a recovery inside the same window
+  overwrite it, so the alert is lost, not only delayed. *Amended 2026-10-19:* the two-clock check
+  removes the throttling false positive that caused exactly this.
 - `WAKE_GRACE_MAX_MS` is a fixed guess at how long an OS takes to re-establish a network. A slow
   VPN reconnect can exceed it, in which case the offline alert fires and the recovery alert
   follows — the pre-fix behaviour, for that case only.
