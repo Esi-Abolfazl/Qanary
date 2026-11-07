@@ -23,20 +23,28 @@ How it works in practice, with tables: [block-check.md](../block-check.md).
   configs load as off.
 - **Read once per host and IP.** For a service with the switch on, when the `HEAD` answers **403** from
   `server: cloudflare` or `AkamaiGHost` and nothing is known yet for that host, the probe sends one small
-  `GET` and reads the first 16 KB. If the page is that CDN's block page (Cloudflare: "you have been
-  blocked" or "Access denied"; Akamai: "Access Denied" with a "Reference #"), the endpoint is `Blocked`,
-  with `cause: "cloudflare"` or `"akamai"` (`block_cause` in `probe.rs`).
+  `GET` and reads the first 16 KB. If the page is that CDN's own error page saying so (Cloudflare: "you
+  have been blocked" or "Access denied" with its Ray ID; Akamai: "Access Denied" with its "Reference #"),
+  the endpoint is `Blocked`, with `cause: "cloudflare"` or `"akamai"` (`block_cause` in `probe.rs`).
+  The page marker is required because every answer through Cloudflare says `server: cloudflare`,
+  including a site's own "Access denied" 403. A `GET` with no answer is not remembered, so the next
+  probe reads again.
 - **The answer is remembered**, blocked or clear (`BlockMemory`, `host:port` -> `Known`). While it is,
   later probes (manual or scheduled) send no `GET`: a known block stays `Blocked`, a clear 403 stays `Up`.
   The memory is cleared when the **WAN IP changes**, when the **network changes** (a VPN on or off), or
   when the **internet drops** (the app turns cut off), so the next probe reads once more. A host is also
   dropped as soon as its `HEAD` is no longer a 403 from a CDN (the block lifted). A restart starts empty.
 - A probe that began before a clear cannot write its answer afterwards (a generation number), and a WAN
-  IP change starts a probe round at once; both found by toggling a VPN several times quickly.
+  IP change starts a probe round at once; both found by toggling a VPN several times quickly. The WAN
+  lookup clears only when the memory was not already cleared since its last lookup, so a network
+  change (cleared by the network watcher) is not read twice, and the first lookup at launch clears
+  nothing.
 - Switching a VPN on or off therefore costs one `GET` per such site and nothing more. (An earlier cut
   read only on a user's Refresh; a blocked VPN then read `Up` until the next Refresh, which tests showed
   to be wrong.)
-- The latency is the real full-path one, because the server did answer.
+- The latency is the real full-path one of the `HEAD`, because the server did answer.
+- A CDN's block page never counts towards cut off: an HTTPS answer from the CDN proves the internet
+  works. It still fails its service and list like any Blocked.
 - The UI uses the existing Blocked colour and rollups. Only the tooltip changes: "Blocked by
   Cloudflare — the site answered but refused your IP (a VPN or proxy often causes this)".
 - A challenge page ("Checking your browser"), a plain 403 and any 5xx are not blocks.
@@ -63,7 +71,8 @@ one `GET` per IP, not one per refresh or per 30 seconds, and other sites cost no
 
 - Right after an IP or network change the first probe reads the page, so a blocked site flips to `Blocked`
   within one probe round (a few seconds), not instantly.
-- A blocked site counts as failing, so a list where every site is behind a block can read as cut off.
+- A blocked site counts as failing, so a list where every site is behind a block reads all down (and a
+  critical one turns red), though never cut off.
 - Only these two CDNs' wording is recognised. Other firewalls still read as `Up`.
 - The `GET` path needs a TLS server to test end to end; the recogniser, the memory and the decision are
   unit-tested.

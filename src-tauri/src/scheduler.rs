@@ -494,9 +494,19 @@ fn watches_blocks(cfg: &crate::models::Config) -> bool {
     cfg.lists.iter().flat_map(|l| &l.services).any(|s| s.enabled && s.check_block)
 }
 
-/// True when the fresh lookup is a different IP from the last known one (or there was none).
-fn ip_changed(prev: Option<&crate::models::WanInfo>, fresh: &crate::models::WanInfo) -> bool {
-    prev.is_none_or(|p| p.ip != fresh.ip)
+/// True when a WAN lookup makes the block memory stale: the IP differs from the last known one,
+/// and the memory was not already cleared since that last lookup. The first lookup at launch
+/// changes nothing (the memory starts empty). After a network change netwatch has cleared it
+/// before this fetch began, so what it holds was read on the new route; clearing again would
+/// read every block page a second time. `fetch_started` and `seen` are memory epochs: taken
+/// before this fetch, and after the last lookup was handled.
+fn memory_stale_after_lookup(
+    prev: Option<&crate::models::WanInfo>,
+    fresh: &crate::models::WanInfo,
+    fetch_started: u64,
+    seen: u64,
+) -> bool {
+    prev.is_some_and(|p| p.ip != fresh.ip) && fetch_started == seen
 }
 
 /// Spawn the single WAN task. Built once in `setup`.
@@ -504,7 +514,9 @@ pub fn spawn_wan_task(app: &AppHandle) {
     let app = app.clone();
     let mut signal_rx = app.state::<AppState>().probe_now.subscribe();
     tauri::async_runtime::spawn(async move {
+        let mut seen = app.state::<AppState>().block_memory.epoch();
         loop {
+            let fetch_started = app.state::<AppState>().block_memory.epoch();
             // Clone client + providers out of the lock before awaiting.
             let (client, providers) = {
                 let state = app.state::<AppState>();
@@ -521,11 +533,18 @@ pub fn spawn_wan_task(app: &AppHandle) {
                 // Read the config before taking the WAN lock: never hold both.
                 let watching = watches_blocks(&state.config.lock().unwrap());
                 let mut wan = state.wan.lock().unwrap();
-                if ip_changed(wan.as_ref(), &info) {
+                // The epoch this IP's memory starts at: ours after a clear here; otherwise the
+                // fetch's start, so a clear that lands mid-fetch (a network change) still counts
+                // as "already cleared" for the next lookup.
+                let stale = memory_stale_after_lookup(wan.as_ref(), &info, fetch_started, seen);
+                seen = fetch_started;
+                if stale {
                     state.block_memory.clear();
-                    // Only when some service uses the block check: probe again at once rather than
-                    // wait for the timer, so a stale answer does not linger. Everyone else is untouched.
-                    if watching && wan.is_some() {
+                    seen = state.block_memory.epoch();
+                    // Only when some service uses the block check: a probe round at once rather
+                    // than wait for the timer, so a stale answer does not linger. With no switch on,
+                    // an IP change triggers nothing new.
+                    if watching {
                         let _ = state.probe_now.send(());
                     }
                 }
@@ -715,16 +734,20 @@ mod tests {
     }
 
     #[test]
-    fn only_a_different_ip_counts_as_a_change() {
+    fn only_a_new_ip_the_memory_has_not_seen_clears_it() {
         let wan = |ip: &str| crate::models::WanInfo {
             ip: ip.into(),
             country_code: "US".into(),
             country_name: "United States".into(),
             flag_emoji: String::new(),
         };
-        assert!(ip_changed(None, &wan("1.1.1.1")), "first lookup");
-        assert!(!ip_changed(Some(&wan("1.1.1.1")), &wan("1.1.1.1")), "same IP");
-        assert!(ip_changed(Some(&wan("1.1.1.1")), &wan("2.2.2.2")), "a new IP");
+        let (a, b) = (wan("1.1.1.1"), wan("2.2.2.2"));
+        assert!(!memory_stale_after_lookup(None, &a, 0, 0), "first lookup: the memory starts empty");
+        assert!(!memory_stale_after_lookup(Some(&a), &a, 0, 0), "same IP");
+        assert!(memory_stale_after_lookup(Some(&a), &b, 3, 3), "a new IP, nothing cleared since");
+        // Netwatch cleared (epoch 3 -> 4) before this fetch: the memory was refilled on the new
+        // route, so clearing again would read each block page twice.
+        assert!(!memory_stale_after_lookup(Some(&a), &b, 4, 3), "already cleared by the network change");
     }
 
     #[test]
