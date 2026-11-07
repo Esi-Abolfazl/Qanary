@@ -1,8 +1,8 @@
-# 0051. A CDN's block page (Cloudflare, Akamai) reads as Blocked — opt-in, asked once per IP
+# 0051. A CDN's block page (Cloudflare, Akamai) reads as Blocked: opt-in, asked once per IP
 
-- **Status:** proposed (needs the owner's OK: it adds a GET to the probe)
+- **Status:** accepted (2026-11-07, by the project owner)
 - **Date:** 2026-10-04
-- **Deciders:** Sajjad (requested), project owner (to confirm)
+- **Deciders:** Sajjad (proposed), Esi-Abolfazl (accepted)
 
 ## Context
 
