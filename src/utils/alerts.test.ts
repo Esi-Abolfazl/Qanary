@@ -31,6 +31,7 @@ const baseConfig: Config = {
   blocked_sound: false,
   notify_volume: 100,
   hide_dock: false,
+  check_blocks: false,
   status_icon: "rings",
   tray_filled: false,
   tray_shape: "same",

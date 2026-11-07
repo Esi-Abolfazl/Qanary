@@ -84,6 +84,7 @@ const CONFIG: Config = {
   // Independent of the *_sound flags (ADR-0028) — a stored level survives every flag being off.
   notify_volume: 70,
   hide_dock: false,
+  check_blocks: false,
   status_icon: "rings",
   tray_filled: false,
   tray_shape: "same",
@@ -263,12 +264,13 @@ describe("App", () => {
 
     expect(api.updateService).toHaveBeenCalledWith("internet", "s1", "google.com", [
       { host: "google.com" },
-    ], false);
+    ], null);
   });
 
   describe("the experimental Cloudflare block check", () => {
-    const withService = (check_block?: boolean) => ({
+    const withService = (check_block?: boolean | null, check_blocks = false) => ({
       ...CONFIG,
+      check_blocks,
       lists: [{
         id: "internet", name: "Internet", icon: "🌐", collapsed: false, critical: false,
         services: [{
@@ -277,46 +279,74 @@ describe("App", () => {
         }],
       }],
     });
+    const choice = (name: RegExp) => screen.getByRole("radio", { name });
 
-    it("is off by default, explained by the ?, and sent when switched on while editing", async () => {
-      const user = userEvent.setup();
-      vi.mocked(api.getConfig).mockResolvedValue(withService());
-      vi.mocked(api.updateService).mockResolvedValue(CONFIG);
+    async function openEdit(user: ReturnType<typeof userEvent.setup>) {
       render(<App />);
       await waitFor(() => screen.getByText("All clear"));
       await user.click(screen.getByTitle("Service options"));
       await user.click(screen.getByRole("button", { name: /^edit$/i }));
+    }
 
-      const sw = screen.getByRole("checkbox", { name: /check cloudflare block/i });
-      expect(sw).not.toBeChecked();
-      expect(screen.getByText(/experimental/i)).toBeInTheDocument();
+    it("a service follows Settings by default, the ? explains it, and On overrides it", async () => {
+      const user = userEvent.setup();
+      vi.mocked(api.getConfig).mockResolvedValue(withService());
+      vi.mocked(api.updateService).mockResolvedValue(CONFIG);
+      await openEdit(user);
+
+      expect(screen.getByRole("radiogroup", { name: /check cloudflare block/i })).toBeInTheDocument();
+      expect(choice(/^default \(off\)$/i)).toHaveAttribute("aria-checked", "true");
       expect(screen.queryByRole("note")).toBeNull();
       await user.click(screen.getByRole("button", { name: /what does this do/i }));
-      expect(screen.getByRole("note")).toHaveTextContent(/reads again only after your ip or network changes/i);
+      expect(screen.getByRole("note")).toHaveTextContent(/default follows settings/i);
 
-      await user.click(sw);
+      await user.click(choice(/^on$/i));
       await user.click(screen.getByRole("button", { name: /^save$/i }));
       expect(api.updateService).toHaveBeenCalledWith("internet", "s1", "google.com", [{ host: "google.com" }], true);
     });
 
-    it("shows a service that already has it on, and adding a service can opt in", async () => {
+    it("with the global switch on, Default says so and Off opts one service out", async () => {
+      const user = userEvent.setup();
+      vi.mocked(api.getConfig).mockResolvedValue(withService(undefined, true));
+      vi.mocked(api.updateService).mockResolvedValue(CONFIG);
+      await openEdit(user);
+
+      expect(choice(/^default \(on\)$/i)).toHaveAttribute("aria-checked", "true");
+      await user.click(choice(/^off$/i));
+      await user.click(screen.getByRole("button", { name: /^save$/i }));
+      expect(api.updateService).toHaveBeenCalledWith("internet", "s1", "google.com", [{ host: "google.com" }], false);
+    });
+
+    it("a 1.1.0 service that had it on shows On, and a new service follows Settings", async () => {
       const user = userEvent.setup();
       vi.mocked(api.getConfig).mockResolvedValue(withService(true));
       vi.mocked(api.addServices).mockResolvedValue(CONFIG);
-      render(<App />);
-      await waitFor(() => screen.getByText("All clear"));
-      await user.click(screen.getByTitle("Service options"));
-      await user.click(screen.getByRole("button", { name: /^edit$/i }));
-      expect(screen.getByRole("checkbox", { name: /check cloudflare block/i })).toBeChecked();
+      await openEdit(user);
+      expect(choice(/^on$/i)).toHaveAttribute("aria-checked", "true");
       await user.click(screen.getByRole("button", { name: /^cancel$/i }));
 
       await user.click(screen.getByTitle("Add service"));
       await user.type(screen.getByLabelText("Services"), "Site: strem.fun");
-      await user.click(screen.getByRole("checkbox", { name: /check cloudflare block/i }));
       await user.click(screen.getByRole("button", { name: /^add$/i }));
       expect(api.addServices).toHaveBeenCalledWith("internet", [
-        expect.objectContaining({ label: "Site", check_block: true }),
+        expect.objectContaining({ label: "Site", check_block: null }),
       ]);
+    });
+
+    it("the global switch lives in Settings and is saved with the form", async () => {
+      const user = userEvent.setup();
+      vi.mocked(api.updateSettings).mockResolvedValue(CONFIG);
+      render(<App />);
+      await waitFor(() => screen.getByText("All clear"));
+
+      await heroAction(user, /^settings$/i);
+      const sw = screen.getByLabelText(/^check cloudflare block$/i);
+      expect(sw).not.toBeChecked();
+      await user.click(sw);
+      await user.click(screen.getByRole("button", { name: /^save$/i }));
+      await waitFor(() =>
+        expect(api.updateSettings).toHaveBeenCalledWith(expect.objectContaining({ check_blocks: true })),
+      );
     });
   });
 

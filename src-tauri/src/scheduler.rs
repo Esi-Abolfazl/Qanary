@@ -106,7 +106,7 @@ async fn run_service_task(
     loop {
         // Read the live base interval + timeout under the lock, then DROP the guard before any
         // await (the config can mutate; we always pick up the latest). Honour the floor.
-        let (base, timeout_ms, client, sem, memory) = {
+        let (base, timeout_ms, check_block, client, sem, memory) = {
             let state = app.state::<AppState>();
             let cfg = state.config.lock().unwrap();
             // Base interval is decided by this Service's parent list criticality.
@@ -121,12 +121,13 @@ async fn run_service_task(
                 cfg.critical_interval_secs,
                 cfg.noncritical_interval_secs,
             ));
-            (base, cfg.timeout_ms, state.probe_client.clone(), state.probe_sem.clone(), state.block_memory.clone())
+            let check_block = cfg.checks_block(&service);
+            (base, cfg.timeout_ms, check_block, state.probe_client.clone(), state.probe_sem.clone(), state.block_memory.clone())
         };
 
         // Probe with NO lock held (network I/O).
         let status =
-            crate::probe::probe_service(&service, &client, &sem, timeout_ms, &memory).await;
+            crate::probe::probe_service(&service, &client, &sem, timeout_ms, check_block, &memory).await;
 
         // Update the streak from this probe's outcome.
         if status.fully_failing() {
@@ -302,7 +303,7 @@ pub fn check_now(
     endpoint_id: Option<&str>,
 ) -> Result<(), String> {
     let state = app.state::<AppState>();
-    let (mut service, timeout_ms) = {
+    let (mut service, timeout_ms, check_block) = {
         let cfg = state.config.lock().unwrap();
         let service = cfg
             .lists
@@ -311,7 +312,8 @@ pub fn check_now(
             .and_then(|l| l.services.iter().find(|s| s.id == service_id && s.enabled))
             .cloned()
             .ok_or("That service isn't being checked")?;
-        (service, cfg.timeout_ms)
+        let check_block = cfg.checks_block(&service);
+        (service, cfg.timeout_ms, check_block)
     };
     if let Some(eid) = endpoint_id {
         service.endpoints.retain(|e| e.id == eid);
@@ -330,7 +332,7 @@ pub fn check_now(
     let endpoint_only = endpoint_id.is_some();
     tauri::async_runtime::spawn(async move {
         // Probe with NO lock held (network I/O).
-        let fresh = crate::probe::probe_service(&service, &client, &sem, timeout_ms, &memory).await;
+        let fresh = crate::probe::probe_service(&service, &client, &sem, timeout_ms, check_block, &memory).await;
         let landed = if endpoint_only {
             match fresh.endpoints.first() {
                 Some(ep) => apply_derived(&app, &list_id, &service_id, generation, |cur| merge_endpoint(cur, ep)),
@@ -491,7 +493,7 @@ pub fn next_wan_delay(last_ok: bool) -> Duration {
 
 /// True when any enabled service has the (experimental) block check on.
 fn watches_blocks(cfg: &crate::models::Config) -> bool {
-    cfg.lists.iter().flat_map(|l| &l.services).any(|s| s.enabled && s.check_block)
+    cfg.lists.iter().flat_map(|l| &l.services).any(|s| s.enabled && cfg.checks_block(s))
 }
 
 /// True when a WAN lookup makes the block memory stale: the IP differs from the last known one,
@@ -727,10 +729,18 @@ mod tests {
         assert!(!watches_blocks(&cfg), "defaults: nothing watches");
         let list = cfg.lists.first_mut().expect("a default list");
         let svc = list.services.first_mut().expect("a default service");
-        svc.check_block = true;
+        svc.check_block = Some(true);
         assert!(watches_blocks(&cfg));
         cfg.lists[0].services[0].enabled = false;
         assert!(!watches_blocks(&cfg), "a disabled service is not probed");
+        cfg.lists[0].services[0].enabled = true;
+        cfg.lists[0].services[0].check_block = None;
+        cfg.check_blocks = true;
+        assert!(watches_blocks(&cfg), "the global switch counts");
+        for s in cfg.lists.iter_mut().flat_map(|l| &mut l.services) {
+            s.check_block = Some(false);
+        }
+        assert!(!watches_blocks(&cfg), "every service opted out");
     }
 
     #[test]

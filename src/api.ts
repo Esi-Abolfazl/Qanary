@@ -25,13 +25,13 @@ export const checkNow = (listId: string, serviceId: string, endpointId?: string)
 export const addServices = (listId: string, services: ServiceDraft[]) =>
   invoke<Config>("add_services", { listId, services });
 
-/** Replace a service's label, endpoints and block-check option (wholesale edit). */
+/** Replace a service's label, endpoints and block-check override (wholesale edit). null = follow Settings. */
 export const updateService = (
   listId: string,
   serviceId: string,
   label: string,
   endpoints: { host: string; port?: number }[],
-  checkBlock: boolean,
+  checkBlock: boolean | null,
 ) => invoke<Config>("update_service", { listId, serviceId, label, endpoints, checkBlock });
 
 export const removeService = (listId: string, serviceId: string) =>
@@ -89,6 +89,7 @@ export type SettingsPatch = Partial<
     | "tray_filled"
     | "tray_shape"
     | "auto_update"
+    | "check_blocks"
   >
 >;
 

@@ -92,6 +92,7 @@ const CONFIG: Config = {
   blocked_sound: false,
   notify_volume: 70,
   hide_dock: false,
+  check_blocks: false,
   status_icon: "pulse",
   tray_filled: true,
   tray_shape: "same",

@@ -10,14 +10,24 @@ blocked" page. The server is alive, so it read green, though you cannot use it.
 
 ## Turning it on
 
-Add / Edit service dialog → **Check Cloudflare block (experimental)** (switch). The **?** beside it
-explains the same thing in short. It is stored per service as `check_block` in `config.json`. Default
-**off**; older configs load as off. In Add mode the switch applies to every service added in that
-dialog.
+**Settings › Block check (experimental) › Check Cloudflare block** turns it on for every service
+(`check_blocks` in `config.json`, default **off**; older configs load as off).
+
+Each service can override it: Add / Edit service dialog → **Check Cloudflare block (experimental)**,
+three choices. The **?** beside it explains the check in short.
+
+| Choice | Stored on the service | The service is checked when |
+|---|---|---|
+| Default (shows the Settings value) | nothing (`check_block` absent) | the Settings switch is on |
+| On | `"check_block": true` | always |
+| Off | `"check_block": false` | never |
+
+In Add mode the choice applies to every service added in that dialog. A service saved by 1.1.0 with the
+switch on has `"check_block": true`, so it stays On. `Config::checks_block` is the one place that decides.
 
 ## What a probe does
 
-For a service with the switch on, per endpoint, after the usual `HEAD`:
+For a service with the check on, per endpoint, after the usual `HEAD`:
 
 | `HEAD` answer | What is remembered for this host and IP | Result |
 |---|---|---|
@@ -67,9 +77,9 @@ So switching a VPN on or off makes the first probe after it read each such site 
 until the next change. The WAN lookup that follows the network event finds the new IP but does not clear
 again: the network watcher already did, before the lookup began, so the memory was filled on the new
 route. If the IP changes without a network event, the WAN lookup (every 5 minutes) clears it and,
-**only if some enabled service has the switch on**, starts a probe round at once (all services, as a
-Refresh does). The first lookup at launch clears nothing: the memory starts empty. With no switch on,
-nothing about probing changes.
+**only if some enabled service has the check on**, starts a probe round at once (all services, as a
+Refresh does). The first lookup at launch clears nothing: the memory starts empty. With the check on
+for no service, nothing about probing changes.
 
 **Quick toggles.** The memory has a generation number that every clear bumps. A probe takes it before
 it touches the network and hands it back when it writes; an answer from before a clear (a probe that
@@ -80,7 +90,7 @@ shadow the new one.
 
 One `GET` (up to 16 KB) per site that answers a CDN 403, per IP. A `GET` that gets no answer is retried
 on the site's next probe, until one is read. Sites that do not answer such a 403
-cost nothing extra, and with the switch off nothing changes at all. The normal `HEAD` probes (about
+cost nothing extra, and with the check off nothing changes at all. The normal `HEAD` probes (about
 100–200 MB a day for the default lists) are untouched.
 
 ## Limits
@@ -100,6 +110,7 @@ cost nothing extra, and with the switch off nothing changes at all. The normal `
 | Decision (`verdict`), memory (`BlockMemory`, `Known`), recogniser (`block_cause`, `cdn_of`), `GET` (`block_page_cause`) | `src-tauri/src/probe.rs` |
 | Clearing on IP change, cut-off | `src-tauri/src/scheduler.rs` (`memory_stale_after_lookup`), `probe.rs` (`note_cut_off`) |
 | Clearing on network change | `src-tauri/src/commands.rs` (`refresh_in_background`) |
-| `check_block` on a service | `src-tauri/src/models.rs`, `src-tauri/src/commands.rs` |
-| The switch and the ? | `src/components/ServiceModal.tsx` |
+| `check_blocks`, `check_block`, `Config::checks_block` | `src-tauri/src/models.rs`, `src-tauri/src/commands.rs` |
+| The Settings switch | `src/components/Settings.tsx` |
+| The per-service choice and the ? | `src/components/ServiceModal.tsx` |
 | The tooltip | `src/components/ServiceRow.tsx` |

@@ -13,7 +13,7 @@
 //! Known limitation: a block page that returns HTTP 200 over a *valid* cert can't be told apart
 //! from the real site by this method; it will read as `Up`.
 //!
-//! One exception, opt-in per service (`Service::check_block`, experimental): a CDN's own block page
+//! One exception, opt-in (`Config::checks_block`, experimental): a CDN's own block page
 //! (Cloudflare's "Sorry, you have been blocked", Akamai's "Access Denied", both HTTP 403) — what a
 //! VPN's IP often gets. When such a HEAD answers 403 from `server: cloudflare` or `AkamaiGHost`,
 //! one small GET reads the page, and a match reads as `Blocked` with a `cause`. That is asked once
@@ -437,9 +437,10 @@ pub async fn probe_service(
     client: &reqwest::Client,
     sem: &Arc<Semaphore>,
     timeout_ms: u64,
+    check_block: bool,
     memory: &BlockMemory,
 ) -> ServiceStatus {
-    let block = svc.check_block.then(|| BlockCheck { memory: memory.clone() });
+    let block = check_block.then(|| BlockCheck { memory: memory.clone() });
     let ep_statuses =
         probe_service_endpoints(svc.id.as_str(), &svc.endpoints, client, sem, timeout_ms, block).await;
     let svc_state = worst_state(&ep_statuses.iter().map(|e| e.state).collect::<Vec<_>>());
@@ -687,7 +688,7 @@ mod tests {
         let svc = Service::with_endpoints("W", vec![Endpoint::new("*.127.0.0.1", 1)]);
         let client = reqwest::Client::new();
         let sem = Arc::new(Semaphore::new(MAX_CONCURRENT));
-        let status = probe_service(&svc, &client, &sem, 500, &BlockMemory::default()).await;
+        let status = probe_service(&svc, &client, &sem, 500, false, &BlockMemory::default()).await;
         assert_eq!(status.state, ServiceState::Down);
     }
 
@@ -771,6 +772,7 @@ mod tests {
             tray_filled: false,
             tray_shape: Default::default(),
             auto_update: true,
+            check_blocks: false,
             last_changelog_version: None,
         };
         let lists = checking_lists(&config);
@@ -788,7 +790,7 @@ mod tests {
         let svc = Service::with_endpoints("X", vec![Endpoint::new("127.0.0.1", 1)]);
         let client = reqwest::Client::new();
         let sem = Arc::new(Semaphore::new(MAX_CONCURRENT));
-        let status = probe_service(&svc, &client, &sem, 500, &BlockMemory::default()).await;
+        let status = probe_service(&svc, &client, &sem, 500, false, &BlockMemory::default()).await;
 
         assert_eq!(status.id, svc.id);
         assert_eq!(status.endpoints.len(), 1, "one endpoint in, one status out");

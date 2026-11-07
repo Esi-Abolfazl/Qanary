@@ -47,12 +47,12 @@ pub struct Service {
     pub enabled: bool,
     #[serde(default)]
     pub endpoints: Vec<Endpoint>,
-    /// Opt-in, experimental: on any probe, read a CDN's block page after a 403 (once per IP), so
-    /// a site that refuses this IP (a VPN's, often) reads `Blocked`, not `Up` (ADR-0051). Off by
-    /// default; older configs load as off. Not written when off, so a config nobody opted in stays
-    /// byte-for-byte what it was.
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    pub check_block: bool,
+    /// This service's override of the global CDN block check (`Config::check_blocks`, ADR-0051):
+    /// `None` follows the global switch, `Some` forces it on or off. Resolved only by
+    /// `Config::checks_block`. Not written while `None`, so older configs (which wrote only
+    /// `true`) load unchanged as a forced on.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub check_block: Option<bool>,
 
     // Legacy fields — only present in old configs written before the multi-endpoint
     // model. Folded into `endpoints` by `store::migrate_legacy` on first load, then
@@ -81,7 +81,7 @@ impl Service {
             label: label.to_string(),
             enabled: true,
             endpoints: vec![Endpoint::new(host, 443)],
-            check_block: false,
+            check_block: None,
             host: None,
             port: None,
         }
@@ -94,7 +94,7 @@ impl Service {
             label: label.to_string(),
             enabled: true,
             endpoints,
-            check_block: false,
+            check_block: None,
             host: None,
             port: None,
         }
@@ -202,6 +202,11 @@ pub struct Config {
     /// Additive: older configs load as on.
     #[serde(default = "default_true")]
     pub auto_update: bool,
+    /// Experimental CDN block check for every service that doesn't override it (ADR-0051): on any
+    /// probe, read a CDN's block page after a 403 (once per IP), so a site that refuses this IP
+    /// (a VPN's, often) reads `Blocked`, not `Up`. Additive: older configs load as off.
+    #[serde(default)]
+    pub check_blocks: bool,
     /// Last app version we showed the "What's new" changelog for. On startup, if the
     /// running version differs, we show that version's CHANGELOG section once and update
     /// this. None = fresh install (we record the version but don't show notes).
@@ -308,6 +313,7 @@ impl Default for Config {
             tray_filled: default_tray_filled(),
             tray_shape: TrayShape::default(),
             auto_update: true,
+            check_blocks: false,
             last_changelog_version: None,
         }
     }
@@ -407,6 +413,11 @@ pub enum TrayShape {
 }
 
 impl Config {
+    /// Whether `svc` gets the CDN block check: its own override, else the global switch.
+    pub fn checks_block(&self, svc: &Service) -> bool {
+        svc.check_block.unwrap_or(self.check_blocks)
+    }
+
     /// The menu-bar icon to draw: its picture (its own, or the status icon's) and whether it is
     /// cut out of a filled square.
     pub fn tray_look(&self) -> (StatusIcon, bool) {
@@ -529,19 +540,29 @@ pub struct ServiceDelta {
 mod tests {
     use super::*;
 
-    /// A config written before the block check existed loads with it off, and a new service
-    /// starts with it off.
+    /// A config written before the global switch loads with it off and its services following
+    /// it; a per-service `true` from 1.1.0 stays a forced on.
     #[test]
-    fn check_block_defaults_to_off() {
-        let old = r#"{"id":"s","label":"X","endpoints":[]}"#;
-        let svc: Service = serde_json::from_str(old).unwrap();
-        assert!(!svc.check_block);
-        assert!(!Service::new("X", "x.com").check_block);
+    fn check_block_follows_the_global_switch_unless_overridden() {
+        let svc: Service = serde_json::from_str(r#"{"id":"s","label":"X","endpoints":[]}"#).unwrap();
+        assert_eq!(svc.check_block, None);
+        assert_eq!(Service::new("X", "x.com").check_block, None);
         let written = serde_json::to_string(&Service::new("X", "x.com")).unwrap();
-        assert!(!written.contains("check_block"), "off is not written: {written}");
-        let on = r#"{"id":"s","label":"X","endpoints":[],"check_block":true}"#;
-        let svc = serde_json::from_str::<Service>(on).unwrap();
-        assert!(svc.check_block);
-        assert!(serde_json::to_string(&svc).unwrap().contains("\"check_block\":true"), "on is written");
+        assert!(!written.contains("check_block"), "following is not written: {written}");
+
+        let mut cfg = Config::default();
+        assert!(!cfg.check_blocks, "global defaults to off");
+        assert!(!cfg.checks_block(&svc));
+        cfg.check_blocks = true;
+        assert!(cfg.checks_block(&svc), "follows the global switch");
+
+        let on: Service =
+            serde_json::from_str(r#"{"id":"s","label":"X","endpoints":[],"check_block":true}"#).unwrap();
+        let off = Service { check_block: Some(false), ..on.clone() };
+        assert!(cfg.checks_block(&on) && !cfg.checks_block(&off), "an override wins when global is on");
+        cfg.check_blocks = false;
+        assert!(cfg.checks_block(&on) && !cfg.checks_block(&off), "an override wins when global is off");
+        assert!(serde_json::to_string(&on).unwrap().contains("\"check_block\":true"));
+        assert!(serde_json::to_string(&off).unwrap().contains("\"check_block\":false"));
     }
 }

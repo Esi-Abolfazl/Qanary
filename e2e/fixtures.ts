@@ -71,6 +71,7 @@ export const CONFIG: Config = {
   // Independent of the *_sound flags (ADR-0028) — a stored level survives every flag being off.
   notify_volume: 70,
   hide_dock: false,
+  check_blocks: false,
   status_icon: "rings",
   tray_filled: false,
   tray_shape: "same",

@@ -26,9 +26,9 @@ pub struct EndpointDraft {
 pub struct ServiceDraft {
     pub label: String,
     pub endpoints: Vec<EndpointDraft>,
-    /// Opt in to the experimental CDN block check for this service (ADR-0051).
+    /// This service's override of the global CDN block check; `None` follows it (ADR-0051).
     #[serde(default)]
-    pub check_block: bool,
+    pub check_block: Option<bool>,
 }
 
 #[tauri::command]
@@ -131,7 +131,7 @@ pub fn update_service(
     service_id: String,
     label: String,
     endpoints: Vec<EndpointDraft>,
-    check_block: bool,
+    check_block: Option<bool>,
 ) -> Result<Config, String> {
     mutate(&app, |cfg| {
         let svc = find_list(cfg, &list_id)?
@@ -223,6 +223,7 @@ pub struct SettingsPatch {
     pub tray_filled: Option<bool>,
     pub tray_shape: Option<crate::models::TrayShape>,
     pub auto_update: Option<bool>,
+    pub check_blocks: Option<bool>,
 }
 
 #[tauri::command]
@@ -273,6 +274,7 @@ fn apply_settings(cfg: &mut Config, p: SettingsPatch) {
         (p.hide_dock, &mut cfg.hide_dock),
         (p.tray_filled, &mut cfg.tray_filled),
         (p.auto_update, &mut cfg.auto_update),
+        (p.check_blocks, &mut cfg.check_blocks),
     ];
     for (new, field) in flags {
         if let Some(v) = new {

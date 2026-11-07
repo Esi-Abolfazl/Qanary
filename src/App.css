@@ -2668,6 +2668,14 @@ body {
   color: var(--text-strong);
   font-weight: 650;
 }
+/* The service dialog's block-check override: sized by its labels, not the status-icon width. */
+.seg-block {
+  width: auto;
+}
+.seg-block .seg-opt {
+  flex: none;
+  white-space: nowrap;
+}
 .seg-opt:focus-visible {
   outline: 0;
   box-shadow: var(--focus-ring);

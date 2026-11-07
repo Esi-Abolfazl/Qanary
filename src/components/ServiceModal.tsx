@@ -1,7 +1,9 @@
 import { useEffect, useId, useState } from "react";
 import { endpointsToText, parseEndpoints, parseServiceLines } from "../utils/parseServices";
 import type { Service, ServiceDraft } from "../types";
-import { Switch } from "./Switch";
+
+/** The service's block-check override: null follows the Settings switch. */
+type BlockChoice = boolean | null;
 
 /**
  * Add/edit modal for services.
@@ -15,19 +17,21 @@ export function ServiceModal({
   mode,
   listName,
   initial,
+  globalCheckBlock,
   onSave,
   onClose,
 }: {
   mode: "add" | "edit";
   listName: string;
   initial?: Service; // the service being edited
+  globalCheckBlock: boolean; // Settings' switch, which "Default" follows
   onSave: (drafts: ServiceDraft[]) => Promise<void>;
   onClose: () => void;
 }) {
   const [text, setText] = useState("");
   const [label, setLabel] = useState(initial?.label ?? "");
   const [hosts, setHosts] = useState(initial ? endpointsToText(initial.endpoints) : "");
-  const [checkBlock, setCheckBlock] = useState(initial?.check_block ?? false);
+  const [checkBlock, setCheckBlock] = useState<BlockChoice>(initial?.check_block ?? null);
   const [helpOpen, setHelpOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -36,7 +40,7 @@ export function ServiceModal({
   useEffect(() => {
     setLabel(initial?.label ?? "");
     setHosts(initial ? endpointsToText(initial.endpoints) : "");
-    setCheckBlock(initial?.check_block ?? false);
+    setCheckBlock(initial?.check_block ?? null);
     setError("");
   }, [initial]);
 
@@ -121,9 +125,9 @@ export function ServiceModal({
           )}
           <div className="modal-block-row">
             <span className="modal-block-label">
-              <label htmlFor={blockId}>
+              <span id={blockId}>
                 Check Cloudflare block <em>(experimental)</em>
-              </label>
+              </span>
               <button
                 type="button"
                 className="modal-help"
@@ -135,14 +139,33 @@ export function ServiceModal({
                 ?
               </button>
             </span>
-            <Switch id={blockId} checked={checkBlock} onChange={setCheckBlock} />
+            <div className="seg seg-block" role="radiogroup" aria-labelledby={blockId}>
+              {([
+                [null, `Default (${globalCheckBlock ? "on" : "off"})`],
+                [true, "On"],
+                [false, "Off"],
+              ] as const).map(([value, text]) => (
+                <button
+                  key={String(value)}
+                  type="button"
+                  role="radio"
+                  aria-checked={checkBlock === value}
+                  className="seg-opt"
+                  onClick={() => setCheckBlock(value)}
+                  disabled={busy}
+                >
+                  {text}
+                </button>
+              ))}
+            </div>
           </div>
           {helpOpen && (
             <p className="modal-hint modal-block-help" role="note">
               Some sites behind Cloudflare or Akamai refuse your IP (a VPN's, often) and show a "you have been
               blocked" page. Normally Qanary still counts that as Up. With this on, when the site answers 403,
               Qanary reads that page once and marks the site Blocked if it is a block page. It reads again only
-              after your IP or network changes, so it adds almost no traffic.
+              after your IP or network changes, so it adds almost no traffic. Default follows Settings › Block
+              check; On or Off sets it for this service only.
             </p>
           )}
           {error && <p className="modal-error">{error}</p>}

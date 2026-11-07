@@ -84,8 +84,8 @@ export interface Service {
   label: string;
   enabled: boolean;
   endpoints: Endpoint[];
-  /** Experimental, opt-in: tell a CDN's "you are blocked" page from the real site (ADR-0051). Absent = off. */
-  check_block?: boolean;
+  /** Override of the global CDN block check (`Config.check_blocks`, ADR-0051). Absent or null = follow it. */
+  check_block?: boolean | null;
 }
 
 export interface ServiceList {
@@ -125,6 +125,8 @@ export interface Config {
    */
   notify_volume: number;
   hide_dock: boolean;
+  /** Experimental: read a CDN's block page for every service that doesn't override it (ADR-0051). */
+  check_blocks: boolean;
   /** The orb's and the menu-bar icon's picture. In the config because the backend draws the tray. */
   status_icon: StatusIcon;
   /** Menu bar only: the icon cut out of a filled rounded square instead of drawn bare. */
@@ -146,5 +148,5 @@ export interface EndpointDraft {
 export interface ServiceDraft {
   label: string;
   endpoints: EndpointDraft[];
-  check_block?: boolean;
+  check_block?: boolean | null;
 }

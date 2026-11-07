@@ -1,6 +1,6 @@
 # 0051. A CDN's block page (Cloudflare, Akamai) reads as Blocked: opt-in, asked once per IP
 
-- **Status:** accepted (2026-11-07, by the project owner)
+- **Status:** accepted (2026-11-07, by the project owner); amended 2026-11-07 (1.1.1: a global switch with a per-service override)
 - **Date:** 2026-10-04
 - **Deciders:** Sajjad (proposed), Esi-Abolfazl (accepted)
 
@@ -18,10 +18,15 @@ default, nor repeated for a site already read.
 
 How it works in practice, with tables: [block-check.md](../block-check.md).
 
-- **Opt-in per service.** The Add / Edit service dialog has a switch "Check Cloudflare block
-  (experimental)" with a "?" that explains it. Stored as `Service::check_block`, default off; older
-  configs load as off.
-- **Read once per host and IP.** For a service with the switch on, when the `HEAD` answers **403** from
+- **Opt-in, globally with a per-service override.** *Amended (1.1.1):* 1.1.0 had only a per-service
+  switch, but a user learns a site is behind Cloudflare only after it reads `Up` wrongly, so picking
+  services one by one in advance did not work. Settings › Block check has one switch
+  (`Config::check_blocks`, default off, older configs load as off). The Add / Edit service dialog has a
+  three-way "Check Cloudflare block (experimental)" control, Default / On / Off, with a "?" that explains
+  it, stored as `Service::check_block: Option<bool>` (`None` = Default, not written). `Config::checks_block`
+  is the one place that resolves them. A 1.1.0 service saved with `check_block: true` loads as a forced
+  On, so nothing it did changes.
+- **Read once per host and IP.** For a service with the check on, when the `HEAD` answers **403** from
   `server: cloudflare` or `AkamaiGHost` and nothing is known yet for that host, the probe sends one small
   `GET` and reads the first 16 KB. If the page is that CDN's own error page saying so (Cloudflare: "you
   have been blocked" or "Access denied" with its Ray ID; Akamai: "Access Denied" with its "Reference #"),
@@ -53,6 +58,10 @@ How it works in practice, with tables: [block-check.md](../block-check.md).
 
 - **On for every service** — extra requests nobody asked for, and a false "Blocked" on sites that only
   look like one. Opt-in keeps the default unchanged.
+- **Only a per-service switch** (1.1.0) — the user must guess which sites sit behind a CDN before any
+  of them reads wrongly. Replaced by the global switch plus override in 1.1.1.
+- **Only a global switch** — simpler, but leaves no way to exempt one site whose own 403 page still
+  looks like a block.
 - **Read the page on every probe** — a `GET` per site every 30 s; the memory avoids it.
 - **Read only on the user's Refresh** — tried first; a blocked IP read `Up` until the next Refresh.
 - **A new state with its own colour** — clearer, but touches every colour, the tray, the list counts and

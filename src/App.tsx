@@ -520,7 +520,7 @@ function App() {
         modal.serviceId,
         draft.label,
         draft.endpoints,
-        draft.check_block ?? false,
+        draft.check_block ?? null,
       );
       setConfig(cfg);
     }
@@ -722,6 +722,7 @@ function App() {
           mode={modal.kind === "addService" ? "add" : "edit"}
           listName={modal.listName}
           initial={modal.kind === "editService" ? modal.initial : undefined}
+          globalCheckBlock={config?.check_blocks ?? false}
           onSave={handleSaveService}
           onClose={() => setModal(null)}
         />

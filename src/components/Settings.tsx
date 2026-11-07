@@ -175,6 +175,7 @@ export function Settings({
   const [loginError, setLoginError] = useState<string | null>(null);
   const [hideDock, setHideDockState] = useState(false);
   const [autoUpdate, setAutoUpdate] = useState(true);
+  const [checkBlocks, setCheckBlocks] = useState(false);
   const [statusIcon, setStatusIcon] = useState<StatusIcon>("pulse");
   const [trayFilled, setTrayFilled] = useState(true);
   const [trayShape, setTrayShape] = useState<TrayShape>("same");
@@ -214,6 +215,7 @@ export function Settings({
     setVolume(config.notify_volume);
     setHideDockState(config.hide_dock);
     setAutoUpdate(config.auto_update);
+    setCheckBlocks(config.check_blocks);
     setStatusIcon(config.status_icon);
     setTrayFilled(config.tray_filled);
     setTrayShape(config.tray_shape);
@@ -285,6 +287,7 @@ export function Settings({
         notify_volume: volume,
         hide_dock: hideDock,
         auto_update: autoUpdate,
+        check_blocks: checkBlocks,
         status_icon: statusIcon,
         tray_filled: trayFilled,
         tray_shape: trayShape,
@@ -489,6 +492,23 @@ export function Settings({
                 Probing too often can look like abuse — some services may
                 rate-limit or block you. Keep intervals as high as your needs
                 allow.
+              </p>
+            </SettingsCard>
+
+            <SettingsCard title="Block check (experimental)">
+              <div className="system-toggle-row">
+                <label className="system-toggle-label" htmlFor="check-blocks-toggle">
+                  Check Cloudflare block
+                </label>
+                <Switch
+                  id="check-blocks-toggle"
+                  checked={checkBlocks}
+                  onChange={setCheckBlocks}
+                />
+              </div>
+              <p className="settings-note">
+                Marks a site Blocked when Cloudflare or Akamai shows it a "you have been blocked" page,
+                often on a VPN. A service can override this in its Edit dialog.
               </p>
             </SettingsCard>
 
