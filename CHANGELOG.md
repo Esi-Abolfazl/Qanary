@@ -8,6 +8,18 @@ heading) become that release's notes. Dev-log-only subsections (`## Internal`, `
 `## Development`, `## Chore`, `## CI`, `## Build`, `## More info`) appear on the GitHub
 release page but are hidden from the in-app "What's new" modal.
 
+## [1.1.1]
+
+## What's new
+
+- Check Cloudflare block now has one switch for every service: Settings › Block check › Check Cloudflare block. It's off by default.
+- A service can still set its own in the Add service and Edit service dialogs. Default follows Settings; On and Off apply to that service only.
+- A service you turned on in 1.1.0 stays on.
+
+## More info
+
+- [ADR 0051](https://github.com/Esi-Abolfazl/Qanary/blob/main/docs/adr/0051-cdn-block-page-reads-as-blocked.md) and [how the check works](https://github.com/Esi-Abolfazl/Qanary/blob/main/docs/block-check.md) describe the new switch.
+
 ## [1.1.0]
 
 ## What's new
