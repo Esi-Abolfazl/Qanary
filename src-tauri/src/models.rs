@@ -47,7 +47,7 @@ pub struct Service {
     pub enabled: bool,
     #[serde(default)]
     pub endpoints: Vec<Endpoint>,
-    /// Opt-in, experimental: on a refresh the user asks for, read a CDN's block page after a 403, so
+    /// Opt-in, experimental: on any probe, read a CDN's block page after a 403 (once per IP), so
     /// a site that refuses this IP (a VPN's, often) reads `Blocked`, not `Up` (ADR-0051). Off by
     /// default; older configs load as off. Not written when off, so a config nobody opted in stays
     /// byte-for-byte what it was.
@@ -358,7 +358,8 @@ impl ServiceState {
 /// True when a set of endpoints is disconnected: none is verified `Up`, none is still `Checking`,
 /// and at least one is `Blocked` or `Down`. A TCP-only `Reachable` counts for neither side:
 /// filtering lets TCP through and breaks TLS, so a connect proves nothing about being cut off
-/// (ADR-0048). The one rule behind a Service's `fully_failing`, a List's `all_down` and cut-off.
+/// (ADR-0048). The one rule behind a Service's `fully_failing`, a List's `all_down` and cut-off
+/// (which first counts a CDN's block page as an answer: `probe::is_cut_off`, ADR-0051).
 pub fn disconnected(states: impl IntoIterator<Item = ServiceState>) -> bool {
     let mut any_failing = false;
     for s in states {

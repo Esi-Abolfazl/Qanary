@@ -31,19 +31,26 @@ applies to the 30 / 60 s timer, a Refresh and a check of one list, service or ho
 
 ### Reading the page
 
-The `GET` reads at most 16 KB and looks for the CDN's own wording, only when the status is 403:
+The `GET` reads at most 16 KB and looks for the CDN's own error page, only when the status is 403.
+Matching ignores case:
 
-| CDN | The body must contain |
-|---|---|
-| Cloudflare | `you have been blocked` or `Access denied` |
-| Akamai | `Access Denied` and `Reference` |
+| CDN | The body must contain | And the CDN's page marker |
+|---|---|---|
+| Cloudflare | `you have been blocked` or `access denied` | `Cloudflare Ray ID` or `cf-error-details` |
+| Akamai | `access denied` | `Reference &#35;` (encoded or plain) or `errors.edgesuite.net` |
+
+The marker matters: every answer through Cloudflare carries `server: cloudflare`, so a site's own
+"Access denied" 403 page would otherwise read as a block of your IP.
 
 A challenge page ("Checking your browser"), a plain 403, a 5xx error or another CDN's wording is **not**
-a block. If the `GET` fails, the site stays `Up` and is remembered as clear.
+a block, and is remembered as clear. If the `GET` gets no answer (a timeout, a dropped route), nothing
+is remembered and the site stays `Up`: the next probe reads again.
 
 A match makes the endpoint `Blocked` with `cause: cloudflare | akamai`. The row's tooltip then says
 "Blocked by Cloudflare — the site answered but refused your IP (a VPN or proxy often causes this)".
-Colours, counts, rollups and alerts are the ordinary Blocked ones.
+Colours, counts, list rollups and alerts are the ordinary Blocked ones, with one exception: a CDN's block
+page never counts towards **cut off**. The CDN answered over HTTPS, which proves the internet works.
+The latency shown is the `HEAD`'s, never the `GET`'s.
 
 ## Memory: read once per IP
 
@@ -57,9 +64,12 @@ Colours, counts, rollups and alerts are the ordinary Blocked ones.
 and a host is forgotten alone when its `HEAD` is no longer a 403 from a CDN (the block lifted).
 
 So switching a VPN on or off makes the first probe after it read each such site once, and nothing more
-until the next change. If the IP changes without a network event, the WAN lookup (every 5 minutes, or
-at once after a network event) clears it and, **only if some enabled service has the switch on**, starts
-a probe round at once. With no switch on, nothing about probing changes.
+until the next change. The WAN lookup that follows the network event finds the new IP but does not clear
+again: the network watcher already did, before the lookup began, so the memory was filled on the new
+route. If the IP changes without a network event, the WAN lookup (every 5 minutes) clears it and,
+**only if some enabled service has the switch on**, starts a probe round at once (all services, as a
+Refresh does). The first lookup at launch clears nothing: the memory starts empty. With no switch on,
+nothing about probing changes.
 
 **Quick toggles.** The memory has a generation number that every clear bumps. A probe takes it before
 it touches the network and hands it back when it writes; an answer from before a clear (a probe that
@@ -68,7 +78,8 @@ shadow the new one.
 
 ## Cost
 
-One `GET` (up to 16 KB) per site that answers a CDN 403, per IP. Sites that do not answer such a 403
+One `GET` (up to 16 KB) per site that answers a CDN 403, per IP. A `GET` that gets no answer is retried
+on the site's next probe, until one is read. Sites that do not answer such a 403
 cost nothing extra, and with the switch off nothing changes at all. The normal `HEAD` probes (about
 100–200 MB a day for the default lists) are untouched.
 
@@ -87,7 +98,7 @@ cost nothing extra, and with the switch off nothing changes at all. The normal `
 | Piece | File |
 |---|---|
 | Decision (`verdict`), memory (`BlockMemory`, `Known`), recogniser (`block_cause`, `cdn_of`), `GET` (`block_page_cause`) | `src-tauri/src/probe.rs` |
-| Clearing on IP change, cut-off | `src-tauri/src/scheduler.rs` (`ip_changed`), `probe.rs` (`note_cut_off`) |
+| Clearing on IP change, cut-off | `src-tauri/src/scheduler.rs` (`memory_stale_after_lookup`), `probe.rs` (`note_cut_off`) |
 | Clearing on network change | `src-tauri/src/commands.rs` (`refresh_in_background`) |
 | `check_block` on a service | `src-tauri/src/models.rs`, `src-tauri/src/commands.rs` |
 | The switch and the ? | `src/components/ServiceModal.tsx` |

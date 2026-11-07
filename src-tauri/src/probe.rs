@@ -160,36 +160,44 @@ fn cdn_of(server: Option<&str>) -> Option<BlockCause> {
     }
 }
 
-/// The CDN whose "you are blocked" page this is: HTTP 403 from that CDN, whose body says so
-/// (Cloudflare: "you have been blocked"; Akamai: "Access Denied" with a "Reference #"). A challenge
-/// ("Checking your browser"), a plain 403 and any 5xx are not blocks.
+/// The CDN whose "you are blocked" page this is: HTTP 403 from that CDN, whose body says so in the
+/// CDN's own error page (Cloudflare: "you have been blocked" or "Access denied" on a page with its
+/// Ray ID; Akamai: "Access Denied" with its encoded "Reference #"). The page marker matters: every
+/// response through Cloudflare carries `server: cloudflare`, so an origin's own "Access denied"
+/// 403 must not count. A challenge ("Checking your browser"), a plain 403 and any 5xx are not blocks.
 pub fn block_cause(status: u16, server: Option<&str>, body: &str) -> Option<BlockCause> {
     if status != 403 {
         return None;
     }
+    let body = body.to_ascii_lowercase();
+    let has = |s: &str| body.contains(s);
     match cdn_of(server)? {
-        BlockCause::Cloudflare => {
-            (body.contains("you have been blocked") || body.contains("Access denied"))
-                .then_some(BlockCause::Cloudflare)
-        }
-        BlockCause::Akamai => (body.contains("Access Denied") && body.contains("Reference"))
-            .then_some(BlockCause::Akamai),
+        BlockCause::Cloudflare => ((has("you have been blocked") || has("access denied"))
+            && (has("cloudflare ray id") || has("cf-error-details")))
+        .then_some(BlockCause::Cloudflare),
+        BlockCause::Akamai => (has("access denied")
+            && (has("reference&#32;&#35;") || has("reference #") || has("errors.edgesuite.net")))
+        .then_some(BlockCause::Akamai),
     }
 }
 
 /// Fetch the start of the page the HEAD just got a 403 for, and see if it is a CDN's block page.
-async fn block_page_cause(client: &reqwest::Client, url: &str) -> Option<BlockCause> {
-    let mut resp = client.get(url).send().await.ok()?;
+/// `Ok(None)`: read, not a block page. `Err`: nothing was read (no answer, or the body broke off
+/// before the first byte), so there is no answer worth remembering.
+async fn block_page_cause(client: &reqwest::Client, url: &str) -> Result<Option<BlockCause>, ()> {
+    let mut resp = client.get(url).send().await.map_err(|_| ())?;
     let server = resp.headers().get("server").and_then(|v| v.to_str().ok()).map(str::to_owned);
     let status = resp.status().as_u16();
     let mut body = Vec::new();
     while body.len() < BLOCK_PAGE_BYTES {
         match resp.chunk().await {
             Ok(Some(chunk)) => body.extend_from_slice(&chunk),
-            _ => break,
+            Ok(None) => break,
+            Err(_) if body.is_empty() => return Err(()),
+            Err(_) => break,
         }
     }
-    block_cause(status, server.as_deref(), &String::from_utf8_lossy(&body))
+    Ok(block_cause(status, server.as_deref(), &String::from_utf8_lossy(&body)))
 }
 
 /// Resolve a stored host for probing.
@@ -261,6 +269,8 @@ async fn probe_endpoint(
     };
     let head = client.head(&url).send().await;
     let http_ok = head.is_ok();
+    // Taken here, not after the block check: a block-page GET must not inflate the HEAD's latency.
+    let head_ms = started.elapsed().as_millis() as u64;
     // Opt-in: a 403 from a known CDN may be its block page (the server answered, but refused us).
     let walled = match block {
         None => None,
@@ -274,10 +284,17 @@ async fn probe_endpoint(
             match verdict(cdn, b.memory.get(host, port)) {
                 Verdict::Blocked(c) => Some(c),
                 Verdict::Read => {
-                    let found = block_page_cause(client, &url).await;
-                    eprintln!("blockcheck: read {host}:{port} -> {found:?}"); // observable for manual tests
-                    b.memory.remember(host, port, found.map_or(Known::Clear, Known::Blocked), epoch.unwrap_or(0));
-                    found
+                    let read = block_page_cause(client, &url).await;
+                    eprintln!("blockcheck: read {host}:{port} -> {read:?}"); // observable for manual tests
+                    match read {
+                        Ok(found) => {
+                            b.memory.remember(host, port, found.map_or(Known::Clear, Known::Blocked), epoch.unwrap_or(0));
+                            found
+                        }
+                        // Not read (timeout, dropped route): remember nothing, so the next probe
+                        // tries again instead of calling the site clear until the IP changes.
+                        Err(()) => None,
+                    }
                 }
                 Verdict::Up => {
                     if cdn.is_none() {
@@ -292,7 +309,7 @@ async fn probe_endpoint(
     // Up → full-path latency through the completed HEAD (TLS handshake included).
     // Blocked → fall back to TCP-only time (the HEAD failed, so its elapsed is noise).
     let latency_ms = Some(if http_ok {
-        started.elapsed().as_millis() as u64
+        head_ms
     } else {
         tcp_ms
     });
@@ -315,7 +332,9 @@ pub fn is_cut_off(lists: &[ListStatus]) -> bool {
             .iter()
             .flat_map(|l| l.services.iter())
             .flat_map(|s| s.endpoints.iter())
-            .map(|e| e.state),
+            // A CDN's block page is a full HTTPS answer from the internet: proof of a connection,
+            // though the site itself refuses us. It still fails its list (ADR-0051).
+            .map(|e| if e.cause.is_some() { ServiceState::Up } else { e.state }),
     )
 }
 
@@ -535,11 +554,22 @@ mod tests {
     /// page or another server's 403 is not.
     #[test]
     fn cdn_block_pages_are_recognised() {
-        let cf = "<title>Attention Required! | Cloudflare</title><h2>Sorry, you have been blocked</h2>";
+        let cf = "<title>Attention Required! | Cloudflare</title><h2>Sorry, you have been blocked</h2>\
+                  <span>Cloudflare Ray ID: <strong>0000000000000000</strong></span>";
+        let cf_1020 = r#"<div id="cf-error-details"><h1>Access denied</h1> Error code 1020</div>"#;
         let akamai = "<H1>Access Denied</H1> You don't have permission to access this server. Reference&#32;&#35;18.2";
         assert_eq!(block_cause(403, Some("cloudflare"), cf), Some(BlockCause::Cloudflare));
-        assert_eq!(block_cause(403, Some("Cloudflare"), "<h1>Access denied</h1> 1020"), Some(BlockCause::Cloudflare));
+        assert_eq!(block_cause(403, Some("Cloudflare"), cf_1020), Some(BlockCause::Cloudflare));
         assert_eq!(block_cause(403, Some("AkamaiGHost"), akamai), Some(BlockCause::Akamai));
+        assert_eq!(
+            block_cause(403, Some("AkamaiGHost"), &akamai.to_uppercase()),
+            Some(BlockCause::Akamai),
+            "wording is matched without case"
+        );
+        // Every response through Cloudflare says `server: cloudflare`: the origin's own 403 page
+        // (no Cloudflare error page around it) is not a block of our IP.
+        assert_eq!(block_cause(403, Some("cloudflare"), "<h1>Access denied</h1> Sign in first."), None);
+        assert_eq!(block_cause(403, Some("AkamaiGHost"), "<h1>Access Denied</h1> No Reference here"), None);
         assert_eq!(block_cause(403, Some("cloudflare"), "Just a moment... Checking your browser"), None);
         assert_eq!(block_cause(403, Some("AkamaiGHost"), "Forbidden"), None);
         assert_eq!(block_cause(403, Some("cloudflare"), "Forbidden"), None);
@@ -833,6 +863,22 @@ mod tests {
         assert!(!is_cut_off(&[list_status(&[&[Reachable, Reachable]])]));
         // No endpoints at all → not cut off.
         assert!(!is_cut_off(&[]));
+    }
+
+    /// A VPN user: the Intranet is Down and every opted-in Internet site shows a Cloudflare block
+    /// page. The CDN answered, so the internet works: not cut off, though both lists are all down.
+    #[test]
+    fn a_cdn_block_page_is_not_cut_off_but_still_fails_its_list() {
+        use ServiceState::*;
+        let mut walled = list_status(&[&[Blocked], &[Blocked]]);
+        for s in &mut walled.services {
+            s.endpoints[0].cause = Some(BlockCause::Cloudflare);
+        }
+        let lists = [walled, list_status(&[&[Down]])];
+        assert!(!is_cut_off(&lists));
+        assert!(lists[0].all_down, "a CDN-blocked list still reads all down");
+        // Without a cause (interception), the same states are cut off.
+        assert!(is_cut_off(&[list_status(&[&[Blocked], &[Blocked]]), list_status(&[&[Down]])]));
     }
 
     #[test]
