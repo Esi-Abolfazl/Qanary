@@ -8,6 +8,19 @@ heading) become that release's notes. Dev-log-only subsections (`## Internal`, `
 `## Development`, `## Chore`, `## CI`, `## Build`, `## More info`) appear on the GitHub
 release page but are hidden from the in-app "What's new" modal.
 
+## [1.1.0]
+
+## What's new
+
+- New option for each service: Check Cloudflare block (experimental), in the Add service and Edit service dialogs. It's off by default.
+- Some sites behind Cloudflare or Akamai refuse your IP (often a VPN's) and show a "you have been blocked" page. Qanary used to show these as Up. With the option on, they show as Blocked, and the dot's tooltip names the CDN.
+- Qanary reads a site's block page once per IP, then again only after your IP or network changes. It adds almost no traffic.
+- A site blocked this way never makes Qanary say you're offline. The CDN answered, so your internet works.
+
+## More info
+
+- [ADR 0051: a CDN's block page reads as Blocked](https://github.com/Esi-Abolfazl/Qanary/blob/main/docs/adr/0051-cdn-block-page-reads-as-blocked.md) and [how the check works](https://github.com/Esi-Abolfazl/Qanary/blob/main/docs/block-check.md). Thanks to Sajjad, who built it.
+
 ## [1.0.3]
 
 ## What's new
